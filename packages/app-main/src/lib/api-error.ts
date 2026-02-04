@@ -71,38 +71,56 @@ export function handleApiError(
     );
   }
 
-  // Prisma errors
-  if (isPrismaError(error)) {
+  // Database errors (Drizzle / pg driver)
+  if (isDatabaseError(error)) {
     console.error(`[${context}] Database error:`, error);
+    const dbError = error as DatabaseError;
 
-    // Handle specific Prisma error codes
-    const prismaError = error as PrismaClientKnownRequestError;
-
-    if (prismaError.code === "P2002") {
+    // Unique constraint violation (PostgreSQL 23505)
+    if (dbError.code === "23505") {
       return apiError(
         "A record with this value already exists",
         ErrorCode.VALIDATION_ERROR,
         409,
-        { field: prismaError.meta?.target }
+        { constraint: dbError.constraint }
       );
     }
 
-    if (prismaError.code === "P2025") {
-      return apiError("Record not found", ErrorCode.NOT_FOUND, 404);
+    // Foreign key violation (PostgreSQL 23503)
+    if (dbError.code === "23503") {
+      return apiError(
+        "Referenced record not found",
+        ErrorCode.NOT_FOUND,
+        404,
+        process.env.NODE_ENV === "development"
+          ? { constraint: dbError.constraint }
+          : undefined
+      );
+    }
+
+    // Not-null violation (PostgreSQL 23502)
+    if (dbError.code === "23502") {
+      return apiError(
+        "A required field is missing",
+        ErrorCode.VALIDATION_ERROR,
+        400,
+        { column: dbError.column }
+      );
     }
 
     // Connection errors
     if (
-      prismaError.message?.includes("Failed to connect") ||
-      prismaError.message?.includes("Connection refused") ||
-      prismaError.message?.includes("timed out")
+      dbError.message?.includes("connection") ||
+      dbError.message?.includes("ECONNREFUSED") ||
+      dbError.message?.includes("timeout") ||
+      dbError.code === "ECONNREFUSED"
     ) {
       return apiError(
         "Unable to connect to database. Please try again later.",
         ErrorCode.DATABASE_ERROR,
         503,
         process.env.NODE_ENV === "development"
-          ? { originalError: prismaError.message }
+          ? { originalError: dbError.message }
           : undefined
       );
     }
@@ -112,7 +130,7 @@ export function handleApiError(
       ErrorCode.DATABASE_ERROR,
       500,
       process.env.NODE_ENV === "development"
-        ? { code: prismaError.code, message: prismaError.message }
+        ? { code: dbError.code, message: dbError.message }
         : undefined
     );
   }
@@ -153,22 +171,26 @@ export function handleApiError(
 }
 
 /**
- * Type guard for Prisma errors
+ * Type guard for database errors (pg driver / Drizzle)
+ *
+ * The `pg` driver throws errors with a `code` property containing
+ * PostgreSQL error codes (e.g. "23505" for unique violation).
  */
-interface PrismaClientKnownRequestError {
+interface DatabaseError {
   code: string;
-  meta?: { target?: string[] };
   message: string;
-  name: string;
+  constraint?: string;
+  column?: string;
+  detail?: string;
 }
 
-function isPrismaError(error: unknown): error is PrismaClientKnownRequestError {
+function isDatabaseError(error: unknown): error is DatabaseError {
   return (
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    "name" in error &&
-    (error as { name: string }).name.includes("Prisma")
+    "message" in error &&
+    typeof (error as DatabaseError).code === "string"
   );
 }
 

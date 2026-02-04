@@ -78,7 +78,7 @@ export function InviteMemberDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button variant="outline" size="sm" className="gap-2 text-sm">
           <IconMail className="h-4 w-4" />
           Invite by Email
         </Button>

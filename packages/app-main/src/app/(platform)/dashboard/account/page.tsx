@@ -10,6 +10,9 @@ import { Skeleton } from "@/src/components/ui/skeleton";
 import { toast } from "@common/components/ui/sonner";
 
 import { authClient } from "@/src/lib/auth-client";
+import { TwoFactorSettings } from "@/components/settings/TwoFactorSettings";
+import { SessionManagement } from "@/components/settings/SessionManagement";
+import { LoginHistory } from "@/components/settings/LoginHistory";
 
 import { useRouter } from "next/navigation";
 
@@ -210,6 +213,15 @@ export default function Page() {
             </div>
           </form>
         </div>
+
+        <Separator className="my-8" />
+        <TwoFactorSettings />
+
+        <Separator className="my-8" />
+        <SessionManagement />
+
+        <Separator className="my-8" />
+        <LoginHistory />
       </div>
     </>
   );

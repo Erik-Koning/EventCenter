@@ -32,7 +32,7 @@ function DropdownMenuTrigger({
 }
 
 function DropdownMenuContent({
-  className,
+  className = "backdrop-blur-[2.5px] bg-white/75",
   sideOffset = 4,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {

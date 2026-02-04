@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, desc, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users, userGoalSets, goals, dailyUpdates, extractedActivities } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 const extractRequestSchema = z.object({
   updateText: z.string().min(10, "Update must be at least 10 characters"),
@@ -35,36 +38,38 @@ export async function POST(request: Request) {
     const validated = extractRequestSchema.parse(body);
 
     // Get user's active goal set (optional - updates can work without goals)
-    const activeGoalSet = await prisma.userGoalSet.findFirst({
-      where: {
-        userId: user.id,
-        status: "active",
-      },
-      orderBy: { createdAt: "desc" },
+    const activeGoalSet = await db.query.userGoalSets.findFirst({
+      where: and(
+        eq(userGoalSets.userId, user.id),
+        eq(userGoalSets.status, "active")
+      ),
+      orderBy: [desc(userGoalSets.createdAt)],
     });
 
     // Get user's active goals for potential linking
-    const activeGoals = await prisma.goal.findMany({
-      where: {
-        userId: user.id,
-        status: "active",
-      },
-      select: {
+    const activeGoals = await db.query.goals.findMany({
+      where: and(
+        eq(goals.userId, user.id),
+        eq(goals.status, "active")
+      ),
+      columns: {
         id: true,
         title: true,
         description: true,
       },
     });
 
+    const periodDateStr = validated.periodDate.toISOString().split("T")[0];
+
     // Check for existing update in same period (with or without goal set)
-    const existingUpdate = await prisma.dailyUpdate.findFirst({
-      where: {
-        userId: user.id,
-        ...(activeGoalSet ? { userGoalSetId: activeGoalSet.id } : {}),
-        updatePeriod: validated.updatePeriod,
-        periodDate: validated.periodDate,
-      },
-      include: {
+    const existingUpdate = await db.query.dailyUpdates.findFirst({
+      where: and(
+        eq(dailyUpdates.userId, user.id),
+        activeGoalSet ? eq(dailyUpdates.userGoalSetId, activeGoalSet.id) : undefined,
+        eq(dailyUpdates.updatePeriod, validated.updatePeriod),
+        eq(dailyUpdates.periodDate, periodDateStr)
+      ),
+      with: {
         extractedActivities: true,
       },
     });
@@ -73,9 +78,9 @@ export async function POST(request: Request) {
     const pythonBackendUrl =
       process.env.PYTHON_BACKEND_URL || "http://localhost:8000";
 
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { timezone: true },
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
+      columns: { timezone: true },
     });
 
     const extractResponse = await fetch(
@@ -104,32 +109,37 @@ export async function POST(request: Request) {
 
     // If existing update, APPEND to it instead of blocking
     if (existingUpdate) {
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await db.transaction(async (tx) => {
         // Append new text to existing update
-        const updatedDailyUpdate = await tx.dailyUpdate.update({
-          where: { id: existingUpdate.id },
-          data: {
+        const [updatedDailyUpdate] = await tx
+          .update(dailyUpdates)
+          .set({
             updateText: existingUpdate.updateText + "\n\n---\n\n" + validated.updateText,
-          },
-        });
+          })
+          .where(eq(dailyUpdates.id, existingUpdate.id))
+          .returning();
 
         // Create new activities linked to existing update
         const newActivities = await Promise.all(
           extractResult.activities.map(async (activity) => {
             const linkedGoalId = findMatchingGoal(activity, activeGoals);
 
-            return tx.extractedActivity.create({
-              data: {
+            const [created] = await tx
+              .insert(extractedActivities)
+              .values({
+                id: createId(),
                 dailyUpdateId: existingUpdate.id,
                 userId: user.id,
                 activityType: activity.activity_type,
-                quantity: activity.quantity,
+                quantity: String(activity.quantity),
                 summary: activity.summary,
-                activityDate: new Date(activity.activity_date),
+                activityDate: activity.activity_date,
                 period: validated.updatePeriod,
                 linkedGoalId,
-              },
-            });
+              })
+              .returning();
+
+            return created;
           })
         );
 
@@ -157,43 +167,49 @@ export async function POST(request: Request) {
     }
 
     // Create DailyUpdate and ExtractedActivity records in a transaction (new update)
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       // Create the daily update (goal set is optional)
-      const dailyUpdate = await tx.dailyUpdate.create({
-        data: {
+      const [dailyUpdate] = await tx
+        .insert(dailyUpdates)
+        .values({
+          id: createId(),
           userId: user.id,
           userGoalSetId: activeGoalSet?.id || null,
           updateText: validated.updateText,
           updatePeriod: validated.updatePeriod,
-          periodDate: validated.periodDate,
-        },
-      });
+          periodDate: periodDateStr,
+        })
+        .returning();
 
       // Create extracted activities, attempting to link to matching goals
-      const extractedActivities = await Promise.all(
+      const createdActivities = await Promise.all(
         extractResult.activities.map(async (activity) => {
           // Try to find a matching goal based on activity summary
           const linkedGoalId = findMatchingGoal(activity, activeGoals);
 
-          return tx.extractedActivity.create({
-            data: {
+          const [created] = await tx
+            .insert(extractedActivities)
+            .values({
+              id: createId(),
               dailyUpdateId: dailyUpdate.id,
               userId: user.id,
               activityType: activity.activity_type,
-              quantity: activity.quantity,
+              quantity: String(activity.quantity),
               summary: activity.summary,
-              activityDate: new Date(activity.activity_date),
+              activityDate: activity.activity_date,
               period: validated.updatePeriod,
               linkedGoalId,
-            },
-          });
+            })
+            .returning();
+
+          return created;
         })
       );
 
       // Update user streak
       await updateStreak(tx, user.id);
 
-      return { dailyUpdate, extractedActivities };
+      return { dailyUpdate, extractedActivities: createdActivities };
     });
 
     return NextResponse.json(
@@ -217,16 +233,16 @@ export async function POST(request: Request) {
  */
 function findMatchingGoal(
   activity: ExtractedActivityFromPython,
-  goals: Array<{ id: string; title: string; description: string }>
+  activeGoals: Array<{ id: string; title: string; description: string }>
 ): string | null {
-  if (goals.length === 0) return null;
+  if (activeGoals.length === 0) return null;
 
   const activityText = `${activity.activity_type} ${activity.summary}`.toLowerCase();
 
   // Score each goal based on keyword overlap
   let bestMatch: { id: string; score: number } | null = null;
 
-  for (const goal of goals) {
+  for (const goal of activeGoals) {
     const goalText = `${goal.title} ${goal.description}`.toLowerCase();
     const goalWords = goalText.split(/\s+/).filter(w => w.length > 3);
 
@@ -262,26 +278,28 @@ function findMatchingGoal(
   return bestMatch && bestMatch.score >= 2 ? bestMatch.id : null;
 }
 
+type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 async function updateStreak(
-  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  tx: TransactionClient,
   userId: string
 ) {
-  const user = await tx.user.findUnique({
-    where: { id: userId },
-    select: {
+  const dbUser = await tx.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: {
       streakCurrent: true,
       streakLongest: true,
       streakLastUpdate: true,
     },
   });
 
-  if (!user) return;
+  if (!dbUser) return;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const lastUpdate = user.streakLastUpdate
-    ? new Date(user.streakLastUpdate)
+  const lastUpdate = dbUser.streakLastUpdate
+    ? new Date(dbUser.streakLastUpdate)
     : null;
 
   if (lastUpdate) {
@@ -293,34 +311,34 @@ async function updateStreak(
     if (daysDiff === 0) {
       return;
     } else if (daysDiff === 1) {
-      const newStreak = user.streakCurrent + 1;
-      await tx.user.update({
-        where: { id: userId },
-        data: {
+      const newStreak = dbUser.streakCurrent + 1;
+      await tx
+        .update(users)
+        .set({
           streakCurrent: newStreak,
-          streakLongest: Math.max(newStreak, user.streakLongest),
+          streakLongest: Math.max(newStreak, dbUser.streakLongest),
           streakLastUpdate: today,
-          totalPoints: { increment: 20 },
-        },
-      });
+          totalPoints: sql`${users.totalPoints} + 20`,
+        })
+        .where(eq(users.id, userId));
     } else {
-      await tx.user.update({
-        where: { id: userId },
-        data: {
+      await tx
+        .update(users)
+        .set({
           streakCurrent: 1,
           streakLastUpdate: today,
-          totalPoints: { increment: 20 },
-        },
-      });
+          totalPoints: sql`${users.totalPoints} + 20`,
+        })
+        .where(eq(users.id, userId));
     }
   } else {
-    await tx.user.update({
-      where: { id: userId },
-      data: {
+    await tx
+      .update(users)
+      .set({
         streakCurrent: 1,
         streakLastUpdate: today,
-        totalPoints: { increment: 20 },
-      },
-    });
+        totalPoints: sql`${users.totalPoints} + 20`,
+      })
+      .where(eq(users.id, userId));
   }
 }

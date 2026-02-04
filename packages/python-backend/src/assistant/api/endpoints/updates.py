@@ -3,7 +3,9 @@
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...schemas.goals import (
     UpdateParseRequest,
@@ -21,18 +23,81 @@ from ...schemas.goals import (
 )
 from ...agent.llm import create_llm
 from ...experts import parse_llm_json
+from ...db.session import get_db
+from ...db.repositories.chat_repository import ChatSessionRepository
+from .events import process_event_chat
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/updates", tags=["updates"])
 
-# In-memory chat history storage (TODO: move to Redis later)
-# Key: session_id, Value: list of ChatMessage dicts
-chat_sessions: Dict[str, List[dict]] = {}
-
-# In-memory pending follow-ups storage (TODO: move to Redis later)
+# In-memory pending follow-ups storage
 # Key: session_id, Value: dict with proposals, activities, and state
+# Note: Chat history is now stored in the database via ChatSessionRepository.
+# Pending follow-ups remain in-memory as they are transient confirmation state.
 pending_follow_ups: Dict[str, dict] = {}
+
+
+async def classify_event_intent(
+    user_message: str,
+    chat_history: List[dict],
+) -> bool:
+    """Classify whether the user's message is an event-creation/scheduling request.
+
+    Uses a lightweight LLM call with a focused system prompt to distinguish between:
+    - Event requests: "Schedule a standup tomorrow at 10am", "Book a meeting with Erik"
+    - NOT event requests: "I worked on the calendar feature today", "Had a meeting about the sprint"
+
+    Returns True if the message is an event-creation/scheduling request.
+    """
+    llm = create_llm()
+
+    # Include last few messages for context
+    recent_history = chat_history[-4:] if len(chat_history) > 4 else chat_history
+    history_text = "\n".join(
+        f"{msg['role']}: {msg['content']}" for msg in recent_history
+    )
+
+    prompt = f"""Classify whether this user message is requesting to CREATE, SCHEDULE, or MANAGE a calendar event.
+
+Recent conversation context:
+{history_text}
+
+Current message: "{user_message}"
+
+EVENT REQUEST examples (return true):
+- "Schedule a standup tomorrow at 10am"
+- "Book a meeting with Erik next Friday"
+- "Can you create a team sync for Monday?"
+- "Set up a recurring daily standup"
+- "Cancel my 3pm meeting"
+- "Move the standup to 2pm"
+
+NOT EVENT REQUEST examples (return false):
+- "I worked on the calendar feature today"
+- "Had a meeting about the sprint" (reporting past activity, not scheduling)
+- "I mentored 2 people and ran an experiment"
+- "Attended the standup this morning" (reporting, not scheduling)
+- "I presented the quarterly results"
+
+Key distinction: Is the user asking to CREATE/SCHEDULE/MODIFY/CANCEL a future event, or are they REPORTING what they already did?
+
+Respond with ONLY valid JSON: {{"is_event_request": true}} or {{"is_event_request": false}}"""
+
+    try:
+        response = await llm.ainvoke([
+            {"role": "system", "content": "You classify user intent. Respond only with JSON."},
+            {"role": "user", "content": prompt},
+        ])
+
+        result = parse_llm_json(response.content)
+        is_event = result.get("is_event_request", False)
+        logger.info(f"[EVENT-INTENT] Classified message as event_request={is_event}: {user_message[:80]}...")
+        return is_event
+
+    except Exception as e:
+        logger.error(f"[EVENT-INTENT] Classification error: {e}", exc_info=True)
+        return False
 
 
 async def analyze_for_follow_ups(
@@ -402,11 +467,14 @@ Respond ONLY with valid JSON."""
 
 
 @router.post("/chat", response_model=ConversationalUpdateResponse)
-async def conversational_update(request: ConversationalUpdateRequest) -> ConversationalUpdateResponse:
+async def conversational_update(
+    request: ConversationalUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+) -> ConversationalUpdateResponse:
     """Handle conversational update extraction with clarification questions.
 
-    This endpoint maintains chat history and will ask clarifying questions
-    if the user's update is vague or lacks specificity. It also handles
+    This endpoint maintains chat history in the database and will ask clarifying
+    questions if the user's update is vague or lacks specificity. It also handles
     follow-up proposal and confirmation flows.
     """
     logger.info(f"Received conversational update for session: {request.session_id}")
@@ -415,11 +483,9 @@ async def conversational_update(request: ConversationalUpdateRequest) -> Convers
         llm = create_llm()
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        # Get or initialize chat history for this session
-        if request.session_id not in chat_sessions:
-            chat_sessions[request.session_id] = []
-
-        chat_history = chat_sessions[request.session_id]
+        # Load chat history from database
+        chat_repo = ChatSessionRepository(db)
+        chat_history = await chat_repo.get_chat_history(request.session_id)
 
         # Check if user is responding to follow-up proposals
         is_followup_response, approved_indices, dismissed_indices = await detect_followup_response(
@@ -435,7 +501,7 @@ async def conversational_update(request: ConversationalUpdateRequest) -> Convers
             activities_data = pending.get("activities", [])
             logger.info(f"[FOLLOW-UP] Retrieved pending data: {len(proposals)} proposals, {len(activities_data)} activities")
 
-            # Add user message to history
+            # Add user message to history (in DB)
             chat_history.append({"role": "user", "content": request.user_message})
 
             # Build confirmation message
@@ -478,7 +544,7 @@ async def conversational_update(request: ConversationalUpdateRequest) -> Convers
                 activities=activities,
                 raw_summary=pending.get("raw_summary", ""),
                 chat_history=chat_messages,
-                proposed_follow_ups=stored_proposals,  # Include proposals so Next.js can save them
+                proposed_follow_ups=stored_proposals,
                 follow_up_analysis_summary="",
                 awaiting_followup_confirmation=False,
                 followup_confirmation_result=FollowUpConfirmationResult(
@@ -490,6 +556,68 @@ async def conversational_update(request: ConversationalUpdateRequest) -> Convers
 
         # Normal flow - add user message to history
         chat_history.append({"role": "user", "content": request.user_message})
+
+        # --- Calendar sub-agent routing ---
+        # Check if the user is requesting to create/schedule an event
+        is_event_request = await classify_event_intent(
+            request.user_message, chat_history
+        )
+
+        if is_event_request:
+            logger.info(f"[EVENT-ROUTING] Event intent detected for session {request.session_id}")
+
+            if not request.team_id or not request.team_members:
+                # No team context available - graceful fallback
+                fallback_msg = (
+                    "It sounds like you want to schedule an event! "
+                    "You can create events from the Calendar page where I have access "
+                    "to your team members and scheduling context. "
+                    "Meanwhile, is there anything else you'd like to log for today?"
+                )
+                chat_history.append({"role": "assistant", "content": fallback_msg})
+
+                chat_messages = [
+                    ChatMessage(role=msg["role"], content=msg["content"])
+                    for msg in chat_history
+                ]
+
+                return ConversationalUpdateResponse(
+                    session_id=request.session_id,
+                    assistant_message=fallback_msg,
+                    needs_clarification=True,
+                    chat_history=chat_messages,
+                )
+
+            # Route to calendar sub-agent
+            team_members_dicts = [
+                {"user_id": m.user_id, "name": m.name}
+                for m in request.team_members
+            ]
+
+            event_response = await process_event_chat(
+                session_id=request.session_id,
+                user_message=request.user_message,
+                user_timezone=request.user_timezone,
+                team_members=team_members_dicts,
+                chat_history=chat_history,
+            )
+
+            # Build response with event data
+            chat_messages = [
+                ChatMessage(role=msg["role"], content=msg["content"])
+                for msg in chat_history
+            ]
+
+            return ConversationalUpdateResponse(
+                session_id=request.session_id,
+                assistant_message=event_response.assistant_message,
+                needs_clarification=event_response.needs_clarification,
+                chat_history=chat_messages,
+                event_action=event_response.action_type if event_response.action_type != "none" else None,
+                created_events=[evt.model_dump() for evt in event_response.created_events],
+                modifications=[mod.model_dump() for mod in event_response.modifications],
+                cancelled_event_ids=event_response.cancelled_event_ids,
+            )
 
         # Build the system prompt
         system_prompt = """You are a friendly assistant helping users log their daily activities.
@@ -525,7 +653,7 @@ For LEVEL 1:
 - Example: "A demo sounds interesting! What did you demo, and who was the audience? Any feedback or outcomes?"
 - Example: "What was the mentoring session about? Any topics covered or progress made?"
 
-LEVEL 2 - MODERATELY COMPLETE (has context but no learnings/outcomes):
+LEVEL 2 - MODERATELY COMPLETE (has context but no learnings/outcomes/measurables):
 Examples of LEVEL 2:
 - "Demoed the new dashboard to the product team" (what + who)
 - "Mentored junior dev on React patterns" (what + who)
@@ -533,10 +661,10 @@ Examples of LEVEL 2:
 
 For LEVEL 2:
 - Acknowledge ONCE with brief encouragement, THEN ask ONE soft question about outcomes/learnings
-- Example: "Nice! How did the demo go? Any feedback?"
+- Example: "Nice! How did the demo go? What was Duration? Any feedback?"
 - If user declines → Extract immediately
 
-LEVEL 3 - COMPLETE WITH DETAILS/LEARNINGS:
+LEVEL 3 - COMPLETE WITH DETAILS/LEARNINGS/Ideally a Measurable:
 Examples of LEVEL 3:
 - "Demoed the new dashboard to product team - they loved the filters, requested export feature"
 - "Experimented with Redis caching - reduced API latency by 40%"
@@ -684,9 +812,11 @@ Remember: Be friendly but not excessive. One acknowledgment per topic. Respect u
 
 @router.delete("/chat/{session_id}")
 async def clear_chat_session(session_id: str):
-    """Clear chat history and pending follow-ups for a session."""
-    if session_id in chat_sessions:
-        del chat_sessions[session_id]
+    """Clear pending follow-ups for a session.
+
+    Note: Chat history is managed by the Next.js frontend (stored in chat_sessions/chat_messages tables).
+    This endpoint only clears the in-memory pending follow-ups state.
+    """
     if session_id in pending_follow_ups:
         del pending_follow_ups[session_id]
     return {"success": True}

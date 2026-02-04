@@ -74,7 +74,7 @@ const roleConfig: Record<string, { label: string; icon: typeof IconUser; color: 
     color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
   },
   admin: {
-    label: "Admin",
+    label: "Manager",
     icon: IconUserShield,
     color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   },
@@ -98,7 +98,7 @@ export function TeamMembersList({
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
 
-  const canManageRoles = currentUserRole === "owner";
+  const canManageRoles = currentUserRole === "owner" || currentUserRole === "admin";
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     setUpdatingRoleId(userId);

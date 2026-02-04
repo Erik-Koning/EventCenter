@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { desc } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { goalGuides } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth, Role } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
+import { logAuditEvent } from "@/lib/audit";
 
 const createGuideSchema = z.object({
   title: z.string().min(1).max(255),
   description: z.string().optional(),
   guideType: z.enum(["role_guide", "goal_guide"]),
-  content: z.string(), // JSON string
+  content: z.record(z.unknown()),
   isDefault: z.boolean().optional(),
   isActive: z.boolean().optional(),
   appliesToUserId: z.string().optional(),
@@ -22,16 +26,16 @@ export async function GET() {
   if (!authResult.success) return authResult.response;
 
   try {
-    const guides = await prisma.goalGuide.findMany({
-      include: {
+    const guides = await db.query.goalGuides.findMany({
+      with: {
         createdBy: {
-          select: { id: true, name: true },
+          columns: { id: true, name: true },
         },
         appliesTo: {
-          select: { id: true, name: true },
+          columns: { id: true, name: true },
         },
       },
-      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+      orderBy: [desc(goalGuides.isDefault), desc(goalGuides.createdAt)],
     });
 
     return NextResponse.json({ guides });
@@ -52,11 +56,27 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = createGuideSchema.parse(body);
 
-    const guide = await prisma.goalGuide.create({
-      data: {
-        ...validated,
+    const [guide] = await db
+      .insert(goalGuides)
+      .values({
+        id: createId(),
+        title: validated.title,
+        description: validated.description || null,
+        guideType: validated.guideType,
+        content: validated.content,
+        isDefault: validated.isDefault ?? false,
+        isActive: validated.isActive ?? true,
+        appliesToUserId: validated.appliesToUserId || null,
         createdById: user.id,
-      },
+      })
+      .returning();
+
+    await logAuditEvent({
+      userId: user.id,
+      action: "guide_create",
+      resource: "guide",
+      resourceId: guide.id,
+      details: { title: validated.title, guideType: validated.guideType },
     });
 
     return NextResponse.json(guide, { status: 201 });

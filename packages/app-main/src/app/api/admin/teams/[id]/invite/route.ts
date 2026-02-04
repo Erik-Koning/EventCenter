@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, gt } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { teams, teamMembers, teamInvitations, users } from "@/db/schema";
 import { z } from "zod";
-import { requireAuth, Role } from "@/lib/authorization";
+import { requireAuth } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
+import { isAllowedDomain } from "@/lib/allowed-domains";
+import { logAuditEvent } from "@/lib/audit";
+import { isTeamManager } from "@/lib/team-authorization";
 import { sendTeamInvitationEmail } from "@common/server/emails/sendTeamInvitationEmail";
 import { randomBytes } from "crypto";
+import { createId } from "@/lib/utils";
 
 const inviteSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -15,23 +21,45 @@ interface RouteParams {
 }
 
 /**
- * POST /api/admin/teams/[id]/invite - Invite a new user to team by email
+ * POST /api/admin/teams/[id]/invite - Invite a new user to team by email.
+ * Allowed for team managers (owner/admin) or system admins.
  */
 export async function POST(request: Request, { params }: RouteParams) {
-  const authResult = await requireAuth({ permissions: { role: Role.ADMIN } });
+  const authResult = await requireAuth();
   if (!authResult.success) return authResult.response;
   const { user: adminUser } = authResult;
 
   const { id: teamId } = await params;
 
   try {
+    // Check authorization: team manager or system admin
+    const managerCheck = await isTeamManager(teamId, adminUser.id);
+    const isSystemAdmin = adminUser.role === "admin";
+
+    if (!managerCheck && !isSystemAdmin) {
+      return apiError(
+        "Only team managers or system admins can send invitations",
+        ErrorCode.FORBIDDEN,
+        403
+      );
+    }
+
     const body = await request.json();
     const validated = inviteSchema.parse(body);
     const email = validated.email.toLowerCase();
 
+    // Check email domain restriction
+    if (!isAllowedDomain(email)) {
+      return apiError(
+        "This email domain is not authorized. Only approved domains can be invited.",
+        ErrorCode.VALIDATION_ERROR,
+        422
+      );
+    }
+
     // Verify team exists
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
+    const team = await db.query.teams.findFirst({
+      where: eq(teams.id, teamId),
     });
 
     if (!team) {
@@ -39,19 +67,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    const existingUser = await db.query.users.findFirst({
+      where: eq(users.email, email),
     });
 
     if (existingUser) {
       // Check if already a member
-      const existingMember = await prisma.teamMember.findUnique({
-        where: {
-          teamId_userId: {
-            teamId,
-            userId: existingUser.id,
-          },
-        },
+      const existingMember = await db.query.teamMembers.findFirst({
+        where: and(
+          eq(teamMembers.teamId, teamId),
+          eq(teamMembers.userId, existingUser.id)
+        ),
       });
 
       if (existingMember) {
@@ -63,12 +89,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
 
       // Add them directly instead of inviting
-      await prisma.teamMember.create({
-        data: {
-          teamId,
-          userId: existingUser.id,
-          role: "member",
-        },
+      await logAuditEvent({
+        userId: adminUser.id,
+        action: "team_member_add",
+        resource: "team",
+        resourceId: teamId,
+        details: { addedUserId: existingUser.id, email },
+      });
+      await db.insert(teamMembers).values({
+        id: createId(),
+        teamId,
+        userId: existingUser.id,
+        role: "member",
       });
 
       return NextResponse.json({
@@ -78,13 +110,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check for existing pending invitation
-    const existingInvitation = await prisma.teamInvitation.findFirst({
-      where: {
-        teamId,
-        email,
-        status: "pending",
-        expiresAt: { gt: new Date() },
-      },
+    const existingInvitation = await db.query.teamInvitations.findFirst({
+      where: and(
+        eq(teamInvitations.teamId, teamId),
+        eq(teamInvitations.email, email),
+        eq(teamInvitations.status, "pending"),
+        gt(teamInvitations.expiresAt, new Date())
+      ),
     });
 
     if (existingInvitation) {
@@ -101,36 +133,41 @@ export async function POST(request: Request, { params }: RouteParams) {
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 day expiry
 
     // Create invitation
-    const invitation = await prisma.teamInvitation.create({
-      data: {
+    const [invitation] = await db
+      .insert(teamInvitations)
+      .values({
+        id: createId(),
         teamId,
         email,
         invitedById: adminUser.id,
         token,
         expiresAt,
-      },
-    });
+      })
+      .returning();
 
     // Send invitation email
     try {
-      await sendTeamInvitationEmail(
-        email,
-        team.name,
-        adminUser.name,
-        token
-      );
+      await sendTeamInvitationEmail(email, team.name, adminUser.name, token);
     } catch (emailError) {
       console.error("Failed to send invitation email:", emailError);
       // Delete the invitation if email fails
-      await prisma.teamInvitation.delete({
-        where: { id: invitation.id },
-      });
+      await db
+        .delete(teamInvitations)
+        .where(eq(teamInvitations.id, invitation.id));
       return apiError(
         "Failed to send invitation email",
         ErrorCode.EXTERNAL_SERVICE_ERROR,
         502
       );
     }
+
+    await logAuditEvent({
+      userId: adminUser.id,
+      action: "team_invite_send",
+      resource: "team",
+      resourceId: teamId,
+      details: { email, invitationId: invitation.id },
+    });
 
     return NextResponse.json(
       {
@@ -149,15 +186,28 @@ export async function POST(request: Request, { params }: RouteParams) {
 }
 
 /**
- * DELETE /api/admin/teams/[id]/invite - Cancel a pending invitation
+ * DELETE /api/admin/teams/[id]/invite - Cancel a pending invitation.
+ * Allowed for team managers (owner/admin) or system admins.
  */
 export async function DELETE(request: Request, { params }: RouteParams) {
-  const authResult = await requireAuth({ permissions: { role: Role.ADMIN } });
+  const authResult = await requireAuth();
   if (!authResult.success) return authResult.response;
 
   const { id: teamId } = await params;
 
   try {
+    // Check authorization: team manager or system admin
+    const managerCheck = await isTeamManager(teamId, authResult.user.id);
+    const isSystemAdmin = authResult.user.role === "admin";
+
+    if (!managerCheck && !isSystemAdmin) {
+      return apiError(
+        "Only team managers or system admins can cancel invitations",
+        ErrorCode.FORBIDDEN,
+        403
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const invitationId = searchParams.get("invitationId");
 
@@ -165,20 +215,20 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return apiError("Invitation ID required", ErrorCode.BAD_REQUEST, 400);
     }
 
-    const invitation = await prisma.teamInvitation.findFirst({
-      where: {
-        id: invitationId,
-        teamId,
-      },
+    const invitation = await db.query.teamInvitations.findFirst({
+      where: and(
+        eq(teamInvitations.id, invitationId),
+        eq(teamInvitations.teamId, teamId)
+      ),
     });
 
     if (!invitation) {
       return apiError("Invitation not found", ErrorCode.NOT_FOUND, 404);
     }
 
-    await prisma.teamInvitation.delete({
-      where: { id: invitationId },
-    });
+    await db
+      .delete(teamInvitations)
+      .where(eq(teamInvitations.id, invitationId));
 
     return NextResponse.json({ success: true });
   } catch (error) {

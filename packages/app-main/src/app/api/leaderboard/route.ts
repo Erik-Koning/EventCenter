@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, gt, desc, sql, count } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users, userAchievements } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -16,35 +18,46 @@ export async function GET(request: Request) {
     const type = searchParams.get("type") || "points"; // points, streak, achievements
     const limit = parseInt(searchParams.get("limit") || "10");
 
-    let leaderboard;
+    let leaderboard: Array<Record<string, unknown>>;
 
     switch (type) {
       case "streak":
-        leaderboard = await prisma.user.findMany({
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            streakCurrent: true,
-            streakLongest: true,
-          },
-          orderBy: { streakCurrent: "desc" },
-          take: limit,
-        });
+        leaderboard = await db
+          .select({
+            id: users.id,
+            name: users.name,
+            image: users.image,
+            streakCurrent: users.streakCurrent,
+            streakLongest: users.streakLongest,
+          })
+          .from(users)
+          .orderBy(desc(users.streakCurrent))
+          .limit(limit);
         break;
 
       case "achievements":
-        const achievementCounts = await prisma.userAchievement.groupBy({
-          by: ["userId"],
-          _count: { achievementId: true },
-          orderBy: { _count: { achievementId: "desc" } },
-          take: limit,
-        });
+        // Get achievement counts grouped by user
+        const achievementCounts = await db
+          .select({
+            userId: userAchievements.userId,
+            achievementCount: count(userAchievements.achievementId),
+          })
+          .from(userAchievements)
+          .groupBy(userAchievements.userId)
+          .orderBy(desc(count(userAchievements.achievementId)))
+          .limit(limit);
 
         const achievementUserIds = achievementCounts.map((ac) => ac.userId);
-        const achievementUsers = await prisma.user.findMany({
-          where: { id: { in: achievementUserIds } },
-          select: { id: true, name: true, image: true },
+
+        if (achievementUserIds.length === 0) {
+          leaderboard = [];
+          break;
+        }
+
+        // Get user details for those with achievements
+        const achievementUsers = await db.query.users.findMany({
+          where: sql`${users.id} IN ${achievementUserIds}`,
+          columns: { id: true, name: true, image: true },
         });
 
         const achievementUserMap = new Map(
@@ -53,23 +66,23 @@ export async function GET(request: Request) {
 
         leaderboard = achievementCounts.map((ac) => ({
           ...achievementUserMap.get(ac.userId),
-          achievementCount: ac._count.achievementId,
+          achievementCount: Number(ac.achievementCount),
         }));
         break;
 
       case "points":
       default:
-        leaderboard = await prisma.user.findMany({
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            totalPoints: true,
-            streakCurrent: true,
-          },
-          orderBy: { totalPoints: "desc" },
-          take: limit,
-        });
+        leaderboard = await db
+          .select({
+            id: users.id,
+            name: users.name,
+            image: users.image,
+            totalPoints: users.totalPoints,
+            streakCurrent: users.streakCurrent,
+          })
+          .from(users)
+          .orderBy(desc(users.totalPoints))
+          .limit(limit);
         break;
     }
 
@@ -89,46 +102,55 @@ export async function GET(request: Request) {
 async function getUserRank(userId: string, type: string): Promise<number> {
   switch (type) {
     case "streak": {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { streakCurrent: true },
+      const dbUser = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: { streakCurrent: true },
       });
-      if (!user) return 0;
+      if (!dbUser) return 0;
 
-      const rank = await prisma.user.count({
-        where: { streakCurrent: { gt: user.streakCurrent } },
-      });
-      return rank + 1;
+      const [result] = await db
+        .select({ count: count() })
+        .from(users)
+        .where(gt(users.streakCurrent, dbUser.streakCurrent));
+
+      return Number(result?.count || 0) + 1;
     }
 
     case "achievements": {
-      const userCount = await prisma.userAchievement.count({
-        where: { userId },
-      });
+      const [userCountResult] = await db
+        .select({ count: count() })
+        .from(userAchievements)
+        .where(eq(userAchievements.userId, userId));
 
-      const higherCounts = await prisma.userAchievement.groupBy({
-        by: ["userId"],
-        _count: { achievementId: true },
-        having: {
-          achievementId: { _count: { gt: userCount } },
-        },
-      });
+      const userCount = Number(userCountResult?.count || 0);
+
+      // Count users with more achievements
+      const higherCounts = await db
+        .select({
+          userId: userAchievements.userId,
+          achievementCount: count(userAchievements.achievementId),
+        })
+        .from(userAchievements)
+        .groupBy(userAchievements.userId)
+        .having(sql`count(${userAchievements.achievementId}) > ${userCount}`);
 
       return higherCounts.length + 1;
     }
 
     case "points":
     default: {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { totalPoints: true },
+      const dbUser = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: { totalPoints: true },
       });
-      if (!user) return 0;
+      if (!dbUser) return 0;
 
-      const rank = await prisma.user.count({
-        where: { totalPoints: { gt: user.totalPoints } },
-      });
-      return rank + 1;
+      const [result] = await db
+        .select({ count: count() })
+        .from(users)
+        .where(gt(users.totalPoints, dbUser.totalPoints));
+
+      return Number(result?.count || 0) + 1;
     }
   }
 }

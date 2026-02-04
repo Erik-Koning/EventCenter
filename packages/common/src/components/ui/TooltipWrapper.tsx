@@ -30,7 +30,7 @@ export const TooltipWrapper = React.forwardRef<HTMLButtonElement, TooltipWrapper
       tooltipJSX,
       side = "bottom",
       sideOffset = 4,
-      className,
+      className = "backdrop-blur-[2.5px] bg-white/65",
       classNameChildren,
       showArrow = false,
       arrowColour = "gray",

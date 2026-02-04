@@ -35,7 +35,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/src/components/ui/sidebar";
-import { user } from "@chat-assistant/database";
+import type { User } from "@/db/types";
 
 const data = {
   navMain: [
@@ -155,7 +155,7 @@ const data = {
 };
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  user: user;
+  user: User;
 }
 
 export function AppSidebar({ user, ...props }: AppSidebarProps) {
@@ -173,7 +173,7 @@ export function AppSidebar({ user, ...props }: AppSidebarProps) {
             >
               <a href="#">
                 <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">Dashboard</span>
+                <span className="text-base font-semibold">Clio</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

@@ -24,10 +24,10 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/src/components/ui/sidebar";
-import { user } from "@chat-assistant/database";
+import type { User } from "@/db/types";
 import LogoutButton from "./auth/logout-button";
 
-export function NavUser({ user }: { user: user }) {
+export function NavUser({ user }: { user: User }) {
   const { isMobile } = useSidebar();
 
   return (

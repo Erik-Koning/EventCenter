@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, gte, sql, isNull, not } from "drizzle-orm";
+import { db } from "@/lib/db";
+import {
+  users,
+  userGoalSets,
+  goals,
+  goalProgressEstimates,
+  extractedActivities,
+  dailyUpdates,
+  notificationSettings,
+} from "@/db/schema";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
 
 /**
@@ -19,58 +29,73 @@ export async function POST(request: Request) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Get users with notifications enabled who haven't updated today
-    const usersToNotify = await prisma.user.findMany({
-      where: {
-        notificationSettings: {
-          dailyReminderEnabled: true,
-        },
-        dailyUpdates: {
-          none: {
-            periodDate: {
-              gte: today,
-            },
-          },
-        },
-      },
-      include: {
-        notificationSettings: true,
-        goalSets: {
-          where: { status: "active" },
-          take: 1,
-        },
-      },
-    });
+    // Get users with daily reminders enabled
+    const usersWithSettings = await db
+      .select({
+        userId: users.id,
+        email: users.email,
+        streakCurrent: users.streakCurrent,
+      })
+      .from(users)
+      .innerJoin(notificationSettings, eq(notificationSettings.userId, users.id))
+      .where(eq(notificationSettings.dailyReminderEnabled, true));
 
-    const notifications: Array<{
+    // Check which users have not updated today
+    const usersToNotify: Array<{
       userId: string;
       email: string;
       type: string;
       message: string;
     }> = [];
 
-    for (const user of usersToNotify) {
-      if (user.goalSets.length > 0) {
-        notifications.push({
-          userId: user.id,
-          email: user.email,
-          type: "daily_reminder",
-          message: `Don't forget to log your progress today! Your ${user.streakCurrent}-day streak is at stake.`,
-        });
+    for (const userRow of usersWithSettings) {
+      // Check if user has daily update today
+      const [todayUpdate] = await db
+        .select({ id: dailyUpdates.id })
+        .from(dailyUpdates)
+        .where(
+          and(
+            eq(dailyUpdates.userId, userRow.userId),
+            gte(dailyUpdates.periodDate, today.toISOString().split("T")[0])
+          )
+        )
+        .limit(1);
+
+      if (!todayUpdate) {
+        // Check if user has active goal sets
+        const [activeGoalSet] = await db
+          .select({ id: userGoalSets.id })
+          .from(userGoalSets)
+          .where(
+            and(
+              eq(userGoalSets.userId, userRow.userId),
+              eq(userGoalSets.status, "active")
+            )
+          )
+          .limit(1);
+
+        if (activeGoalSet) {
+          usersToNotify.push({
+            userId: userRow.userId,
+            email: userRow.email,
+            type: "daily_reminder",
+            message: `Don't forget to log your progress today! Your ${userRow.streakCurrent}-day streak is at stake.`,
+          });
+        }
       }
     }
 
     // Check for users below progress threshold
-    const activeGoalSets = await prisma.userGoalSet.findMany({
-      where: { status: "active" },
-      include: {
+    const activeGoalSets = await db.query.userGoalSets.findMany({
+      where: eq(userGoalSets.status, "active"),
+      with: {
         user: {
-          include: {
+          with: {
             notificationSettings: true,
           },
         },
         goals: {
-          include: {
+          with: {
             progressEstimates: true,
             linkedActivities: true,
           },
@@ -88,8 +113,9 @@ export async function POST(request: Request) {
         if (!estimate) continue;
 
         // Calculate expected vs actual progress
+        const startDate = new Date(goalSet.startDate);
         const daysSinceStart = Math.floor(
-          (today.getTime() - goalSet.startDate.getTime()) / (1000 * 60 * 60 * 24)
+          (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
         );
         const expectedProgress = daysSinceStart * Number(estimate.estimatedPerDay);
 
@@ -102,7 +128,7 @@ export async function POST(request: Request) {
           expectedProgress > 0 ? (actualProgress / expectedProgress) * 100 : 100;
 
         if (progressPercent < threshold) {
-          notifications.push({
+          usersToNotify.push({
             userId: goalSet.user.id,
             email: goalSet.user.email,
             type: "progress_warning",
@@ -114,12 +140,12 @@ export async function POST(request: Request) {
 
     // In a real implementation, this would send emails via Azure Communication Services
     // For now, just return the notifications that would be sent
-    console.log(`Would send ${notifications.length} notifications`);
+    console.log(`Would send ${usersToNotify.length} notifications`);
 
     return NextResponse.json({
       success: true,
-      notificationsQueued: notifications.length,
-      notifications: process.env.NODE_ENV === "development" ? notifications : undefined,
+      notificationsQueued: usersToNotify.length,
+      notifications: process.env.NODE_ENV === "development" ? usersToNotify : undefined,
     });
   } catch (error) {
     return handleApiError(error, "notifications/check-progress:POST");

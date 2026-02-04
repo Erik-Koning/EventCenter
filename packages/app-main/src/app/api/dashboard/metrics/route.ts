@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, gte, and, desc, asc, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import {
+  users,
+  updateFollowUps,
+  extractedActivities,
+  dailyUpdates,
+  teamMembers,
+  teams,
+} from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -21,20 +30,24 @@ export async function GET() {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     startOfMonth.setHours(0, 0, 0, 0);
 
+    // Format dates for comparison
+    const weekDateStr = startOfWeek.toISOString().split("T")[0];
+    const monthDateStr = startOfMonth.toISOString().split("T")[0];
+
     // Fetch all metrics in parallel
     const [
       dbUser,
-      pendingFollowUps,
-      weeklyActivities,
-      monthlyActivities,
+      pendingFollowUpsResult,
+      weeklyActivitiesResult,
+      monthlyActivitiesResult,
       monthlyByType,
       recentUpdates,
       userTeam,
     ] = await Promise.all([
       // Get user streak info
-      prisma.user.findUnique({
-        where: { id: user.id },
-        select: {
+      db.query.users.findFirst({
+        where: eq(users.id, user.id),
+        columns: {
           streakCurrent: true,
           streakLongest: true,
           totalPoints: true,
@@ -42,56 +55,72 @@ export async function GET() {
       }),
 
       // Count pending follow-ups
-      prisma.updateFollowUp.count({
-        where: { userId: user.id, status: "confirmed" },
-      }),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(updateFollowUps)
+        .where(
+          and(
+            eq(updateFollowUps.userId, user.id),
+            eq(updateFollowUps.status, "confirmed")
+          )
+        ),
 
       // Count activities this week
-      prisma.extractedActivity.count({
-        where: {
-          userId: user.id,
-          activityDate: { gte: startOfWeek },
-        },
-      }),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(extractedActivities)
+        .where(
+          and(
+            eq(extractedActivities.userId, user.id),
+            gte(extractedActivities.activityDate, weekDateStr)
+          )
+        ),
 
       // Count activities this month
-      prisma.extractedActivity.count({
-        where: {
-          userId: user.id,
-          activityDate: { gte: startOfMonth },
-        },
-      }),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(extractedActivities)
+        .where(
+          and(
+            eq(extractedActivities.userId, user.id),
+            gte(extractedActivities.activityDate, monthDateStr)
+          )
+        ),
 
       // Group activities by type this month
-      prisma.extractedActivity.groupBy({
-        by: ["activityType"],
-        where: {
-          userId: user.id,
-          activityDate: { gte: startOfMonth },
-        },
-        _sum: { quantity: true },
-        _count: true,
-      }),
+      db
+        .select({
+          activityType: extractedActivities.activityType,
+          totalQuantity: sql<number>`sum(${extractedActivities.quantity})`,
+          count: sql<number>`count(*)`,
+        })
+        .from(extractedActivities)
+        .where(
+          and(
+            eq(extractedActivities.userId, user.id),
+            gte(extractedActivities.activityDate, monthDateStr)
+          )
+        )
+        .groupBy(extractedActivities.activityType),
 
-      // Get recent daily updates
-      prisma.dailyUpdate.findMany({
-        where: { userId: user.id },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        include: {
-          _count: { select: { extractedActivities: true } },
+      // Get recent daily updates with activity counts
+      db.query.dailyUpdates.findMany({
+        where: eq(dailyUpdates.userId, user.id),
+        orderBy: [desc(dailyUpdates.createdAt)],
+        limit: 5,
+        with: {
+          extractedActivities: true,
         },
       }),
 
       // Get user's active team
-      prisma.teamMember.findFirst({
-        where: { userId: user.id },
-        include: {
+      db.query.teamMembers.findFirst({
+        where: eq(teamMembers.userId, user.id),
+        with: {
           team: {
-            select: {
+            columns: {
               id: true,
               name: true,
-              _count: { select: { members: true } },
             },
           },
         },
@@ -99,29 +128,40 @@ export async function GET() {
     ]);
 
     // Get top pending follow-ups with due dates
-    const topFollowUps = await prisma.updateFollowUp.findMany({
-      where: { userId: user.id, status: "confirmed" },
-      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-      take: 5,
-      select: {
-        id: true,
-        title: true,
-        dueDate: true,
+    const topFollowUps = await db.query.updateFollowUps.findMany({
+      where: and(
+        eq(updateFollowUps.userId, user.id),
+        eq(updateFollowUps.status, "confirmed")
+      ),
+      orderBy: [asc(updateFollowUps.dueDate), desc(updateFollowUps.createdAt)],
+      limit: 5,
+      with: {
         extractedActivity: {
-          select: { activityType: true },
+          columns: { activityType: true },
         },
       },
     });
 
-    // Get team activity this month if user has a team
+    // Get team member count and monthly activities if user has a team
     let teamMonthlyActivities = 0;
+    let teamMemberCount = 0;
     if (userTeam?.team) {
-      teamMonthlyActivities = await prisma.extractedActivity.count({
-        where: {
-          teamId: userTeam.team.id,
-          activityDate: { gte: startOfMonth },
-        },
-      });
+      const [teamActivityResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(extractedActivities)
+        .where(
+          and(
+            eq(extractedActivities.teamId, userTeam.team.id),
+            gte(extractedActivities.activityDate, monthDateStr)
+          )
+        );
+      teamMonthlyActivities = Number(teamActivityResult?.count || 0);
+
+      const [memberCountResult] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(teamMembers)
+        .where(eq(teamMembers.teamId, userTeam.team.id));
+      teamMemberCount = Number(memberCountResult?.count || 0);
     }
 
     return NextResponse.json({
@@ -130,32 +170,32 @@ export async function GET() {
         longest: dbUser?.streakLongest || 0,
         points: dbUser?.totalPoints || 0,
       },
-      pendingFollowUpsCount: pendingFollowUps,
-      activitiesThisWeek: weeklyActivities,
-      activitiesThisMonth: monthlyActivities,
+      pendingFollowUpsCount: Number(pendingFollowUpsResult[0]?.count || 0),
+      activitiesThisWeek: Number(weeklyActivitiesResult[0]?.count || 0),
+      activitiesThisMonth: Number(monthlyActivitiesResult[0]?.count || 0),
       activitiesByType: monthlyByType.map((item) => ({
         activityType: item.activityType,
-        count: item._count,
-        totalQuantity: item._sum.quantity || 0,
+        count: Number(item.count),
+        totalQuantity: Number(item.totalQuantity) || 0,
       })),
       recentUpdates: recentUpdates.map((update) => ({
         id: update.id,
-        periodDate: update.periodDate.toISOString(),
+        periodDate: update.periodDate,
         updatePeriod: update.updatePeriod,
         createdAt: update.createdAt.toISOString(),
-        activityCount: update._count.extractedActivities,
+        activityCount: update.extractedActivities.length,
       })),
       topFollowUps: topFollowUps.map((fu) => ({
         id: fu.id,
         title: fu.title,
-        dueDate: fu.dueDate?.toISOString() || null,
+        dueDate: fu.dueDate || null,
         activityType: fu.extractedActivity.activityType,
       })),
       team: userTeam?.team
         ? {
             id: userTeam.team.id,
             name: userTeam.team.name,
-            memberCount: userTeam.team._count.members,
+            memberCount: teamMemberCount,
             monthlyActivities: teamMonthlyActivities,
           }
         : null,

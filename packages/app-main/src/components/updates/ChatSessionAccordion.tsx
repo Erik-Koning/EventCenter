@@ -7,6 +7,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   IconFlask,
@@ -20,8 +26,12 @@ import {
   IconMessageCircle,
   IconCalendar,
   IconClock,
+  IconDotsVertical,
+  IconPlayerPlay,
+  IconTrash,
 } from "@tabler/icons-react";
 import { format, formatDistanceStrict, parseISO } from "date-fns";
+import { useRouter } from "next/navigation";
 
 interface ChatMessage {
   id: string;
@@ -53,6 +63,7 @@ export interface ChatSessionData {
 interface ChatSessionAccordionProps {
   sessions: ChatSessionData[];
   className?: string;
+  onDeleteSession?: (sessionId: string) => void;
 }
 
 const activityConfig: Record<
@@ -144,7 +155,10 @@ function formatPeriod(period: string) {
 export function ChatSessionAccordion({
   sessions,
   className,
+  onDeleteSession,
 }: ChatSessionAccordionProps) {
+  const router = useRouter();
+
   if (sessions.length === 0) {
     return null;
   }
@@ -155,9 +169,9 @@ export function ChatSessionAccordion({
         <AccordionItem
           key={session.id}
           value={session.id}
-          className="border rounded-lg mb-3 px-4"
+          className="relative group border rounded-lg mb-3 px-4"
         >
-          <AccordionTrigger className="hover:no-underline">
+          <AccordionTrigger className="hover:no-underline pr-24">
             <div className="flex flex-col items-start gap-2 text-left flex-1 mr-4">
               {/* Date and Period */}
               <div className="flex items-center gap-2 text-sm">
@@ -193,6 +207,47 @@ export function ChatSessionAccordion({
               </div>
             </div>
           </AccordionTrigger>
+
+          {/* Action buttons - positioned outside AccordionTrigger */}
+          <div
+            className="absolute right-4 top-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-muted-foreground hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+              onClick={() => router.push(`/update?session=${session.sessionId}`)}
+            >
+              <IconPlayerPlay className="h-3.5 w-3.5" />
+              Continue
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <IconDotsVertical className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => router.push(`/update?session=${session.sessionId}`)}
+                >
+                  <IconPlayerPlay className="h-4 w-4 mr-2" />
+                  Continue Chat
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => onDeleteSession?.(session.sessionId)}
+                >
+                  <IconTrash className="h-4 w-4 mr-2" />
+                  Delete Session
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
           <AccordionContent>
             <div className="space-y-6 pt-2">

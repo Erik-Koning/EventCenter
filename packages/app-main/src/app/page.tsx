@@ -23,7 +23,7 @@ export default async function page() {
         <div className="container  flex h-16 items-center justify-between">
           <div className="flex items-center ">
             {/* <Lock size={24} className="text-primary" /> */}
-            <span className="font-bold text-xl">Better-Auth</span>
+            <span className="font-bold text-xl">Clio</span>
           </div>
           <nav className="flex items-center gap-6">
             <div className="flex items-center gap-2">

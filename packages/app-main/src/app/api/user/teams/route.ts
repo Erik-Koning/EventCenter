@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, asc } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { teams, teamMembers } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
-import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
+import { handleApiError } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 const createTeamSchema = z.object({
   name: z.string().min(1).max(255),
@@ -18,18 +21,18 @@ export async function GET() {
   const { user } = authResult;
 
   try {
-    const memberships = await prisma.teamMember.findMany({
-      where: { userId: user.id },
-      include: {
+    const memberships = await db.query.teamMembers.findMany({
+      where: eq(teamMembers.userId, user.id),
+      with: {
         team: {
-          select: {
+          columns: {
             id: true,
             name: true,
             description: true,
           },
         },
       },
-      orderBy: { joinedAt: "asc" },
+      orderBy: [asc(teamMembers.joinedAt)],
     });
 
     return NextResponse.json({
@@ -59,24 +62,30 @@ export async function POST(request: Request) {
     const validated = createTeamSchema.parse(body);
 
     // Create team and add user as owner in a transaction
-    const team = await prisma.team.create({
-      data: {
+    const teamId = createId();
+    const memberId = createId();
+
+    const [team] = await db
+      .insert(teams)
+      .values({
+        id: teamId,
         name: validated.name,
         description: validated.description || null,
         createdById: user.id,
-        members: {
-          create: {
-            userId: user.id,
-            role: "owner",
-          },
-        },
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        createdAt: true,
-      },
+      })
+      .returning({
+        id: teams.id,
+        name: teams.name,
+        description: teams.description,
+        createdAt: teams.createdAt,
+      });
+
+    // Add user as owner
+    await db.insert(teamMembers).values({
+      id: memberId,
+      teamId: teamId,
+      userId: user.id,
+      role: "owner",
     });
 
     return NextResponse.json({ team }, { status: 201 });

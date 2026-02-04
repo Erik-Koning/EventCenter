@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users, teams, teamMembers } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
@@ -17,12 +19,14 @@ export async function GET() {
   const { user } = authResult;
 
   try {
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
+      columns: {
         activeTeamId: true,
+      },
+      with: {
         activeTeam: {
-          select: {
+          columns: {
             id: true,
             name: true,
             description: true,
@@ -54,13 +58,11 @@ export async function PATCH(request: Request) {
 
     // If setting a team, verify user is a member
     if (validated.teamId) {
-      const membership = await prisma.teamMember.findUnique({
-        where: {
-          teamId_userId: {
-            teamId: validated.teamId,
-            userId: user.id,
-          },
-        },
+      const membership = await db.query.teamMembers.findFirst({
+        where: and(
+          eq(teamMembers.teamId, validated.teamId),
+          eq(teamMembers.userId, user.id)
+        ),
       });
 
       if (!membership) {
@@ -72,24 +74,30 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const updated = await prisma.user.update({
-      where: { id: user.id },
-      data: { activeTeamId: validated.teamId },
-      select: {
-        activeTeamId: true,
-        activeTeam: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-          },
+    const [updated] = await db
+      .update(users)
+      .set({ activeTeamId: validated.teamId })
+      .where(eq(users.id, user.id))
+      .returning({
+        activeTeamId: users.activeTeamId,
+      });
+
+    // Fetch the active team details if set
+    let activeTeam = null;
+    if (updated.activeTeamId) {
+      activeTeam = await db.query.teams.findFirst({
+        where: eq(teams.id, updated.activeTeamId),
+        columns: {
+          id: true,
+          name: true,
+          description: true,
         },
-      },
-    });
+      });
+    }
 
     return NextResponse.json({
       activeTeamId: updated.activeTeamId,
-      activeTeam: updated.activeTeam,
+      activeTeam,
     });
   } catch (error) {
     return handleApiError(error, "user/active-team:PATCH");

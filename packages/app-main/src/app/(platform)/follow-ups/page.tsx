@@ -43,9 +43,11 @@ import {
   IconRefresh,
   IconDotsVertical,
   IconCalendar,
+  IconPencil,
 } from "@tabler/icons-react";
 import { cn } from "@/src/lib/utils";
 import { toast } from "@common/components/ui/sonner";
+import FollowUpEditDialog from "@/components/updates/FollowUpEditDialog";
 
 interface FollowUp {
   id: string;
@@ -56,6 +58,7 @@ interface FollowUp {
   dueDate: string | null;
   completedAt: string | null;
   createdAt: string;
+  linkedEventId: string | null;
   chatSession: {
     id: string;
     sessionId: string;
@@ -153,6 +156,7 @@ export default function FollowUpsPage() {
   const [sortBy, setSortBy] = useState<string>("dueDate");
   const [sortOrder, setSortOrder] = useState<string>("asc");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [editingFollowUp, setEditingFollowUp] = useState<FollowUp | null>(null);
 
   const fetchFollowUps = useCallback(async () => {
     setIsLoading(true);
@@ -520,6 +524,12 @@ export default function FollowUpsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => setEditingFollowUp(followUp)}
+                          >
+                            <IconPencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
                           {followUp.status === "confirmed" && (
                             <>
                               <DropdownMenuItem
@@ -569,6 +579,18 @@ export default function FollowUpsPage() {
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {/* Edit Dialog */}
+      {editingFollowUp && (
+        <FollowUpEditDialog
+          followUp={editingFollowUp}
+          open={!!editingFollowUp}
+          onOpenChange={(open) => {
+            if (!open) setEditingFollowUp(null);
+          }}
+          onSaved={fetchFollowUps}
+        />
       )}
     </div>
   );

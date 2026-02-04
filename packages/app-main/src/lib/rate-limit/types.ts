@@ -38,4 +38,4 @@ export interface RateLimitErrorResponse {
 /**
  * Available tier identifiers
  */
-export type RateLimitTierId = "expensive_llm" | "standard_llm";
+export type RateLimitTierId = "expensive_llm" | "standard_llm" | "auth";

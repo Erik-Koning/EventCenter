@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/card";
 import { Button } from "@common/components/ui/Button";
 import { Skeleton } from "@/src/components/ui/skeleton";
+import { Badge } from "@/src/components/ui/badge";
 import { CreateTeamDialog } from "@/components/admin/teams/CreateTeamDialog";
-import { IconUsers, IconChevronRight, IconShield } from "@tabler/icons-react";
+import { IconUsers, IconChevronRight, IconShield, IconCrown, IconUserShield } from "@tabler/icons-react";
 
 interface Team {
   id: string;
@@ -18,22 +20,46 @@ interface Team {
     name: string;
     email: string;
   };
+  userRole: string | null;
   _count: {
     members: number;
     invitations: number;
   };
 }
 
+const roleLabelMap: Record<string, string> = {
+  owner: "Owner",
+  admin: "Manager",
+  member: "Member",
+};
+
 export default function AdminTeamsPage() {
+  const router = useRouter();
   const [teams, setTeams] = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasRedirected, setHasRedirected] = useState(false);
 
   const loadTeams = async () => {
     try {
-      const response = await fetch("/api/admin/teams");
-      if (response.ok) {
-        const data = await response.json();
+      const [teamsRes, activeTeamRes] = await Promise.all([
+        fetch("/api/admin/teams"),
+        fetch("/api/user/active-team"),
+      ]);
+
+      if (teamsRes.ok) {
+        const data = await teamsRes.json();
         setTeams(data.teams);
+
+        // Auto-redirect to active team if it's in the manageable list
+        if (!hasRedirected && activeTeamRes.ok) {
+          const activeData = await activeTeamRes.json();
+          const activeTeamId = activeData.activeTeamId;
+          if (activeTeamId && data.teams.some((t: Team) => t.id === activeTeamId)) {
+            setHasRedirected(true);
+            router.replace(`/admin/teams/${activeTeamId}`);
+            return;
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to load teams:", error);
@@ -116,8 +142,17 @@ export default function AdminTeamsPage() {
                       </div>
                     )}
                   </div>
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    Created by {team.createdBy.name}
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      Created by {team.createdBy.name}
+                    </span>
+                    {team.userRole && (
+                      <Badge variant="secondary" className="text-xs gap-1">
+                        {team.userRole === "owner" && <IconCrown className="h-3 w-3" />}
+                        {team.userRole === "admin" && <IconUserShield className="h-3 w-3" />}
+                        {roleLabelMap[team.userRole] || team.userRole}
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
               </Card>

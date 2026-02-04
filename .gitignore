@@ -1,13 +1,23 @@
 node_modules
-.env
 .DS_Store
 .cursorrules
+
+# local env files
+**/.env*
+.env*.local
+.env*
+.env
+.env.SST.*
+!**/.env.example
+!.env.example
 
 .cursor
 .idea
 .pytest_cache
 **/*.log
 **/models
+
+**/__pycache__/*
 
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
@@ -21,6 +31,8 @@ node_modules
 
 # testing
 /coverage
+/temp
+/tmp
 
 # next.js
 /.next/
@@ -46,13 +58,6 @@ node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# local env files
-**/.env*
-.env*.local
-.env*
-.env
-.env.SST.*
 
 # vercel
 .vercel

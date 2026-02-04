@@ -104,7 +104,7 @@ export function AddMemberDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button variant="outline" size="sm" className="gap-2 text-sm">
           <IconUserPlus className="h-4 w-4" />
           Add Member
         </Button>
@@ -154,7 +154,7 @@ export function AddMemberDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="admin">Manager</SelectItem>
                 </SelectContent>
               </Select>
             </div>

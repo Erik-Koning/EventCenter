@@ -277,12 +277,7 @@ export default function GoalDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {goal.goalUpdates.map((update) => {
-              let parsed = null;
-              try {
-                if (update.parsedData) {
-                  parsed = JSON.parse(update.parsedData);
-                }
-              } catch {}
+              const parsed = update.parsedData as { summary?: string; activities?: Array<Record<string, unknown>> } | null;
 
               return (
                 <div

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users, userGoalSets, dailyUpdates, extractedActivities } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 const createUpdateSchema = z.object({
   goalSetId: z.string(),
@@ -25,26 +28,26 @@ export async function GET(request: Request) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 
-    const updates = await prisma.dailyUpdate.findMany({
-      where: {
-        userId: user.id,
-        ...(goalSetId && { userGoalSetId: goalSetId }),
-        ...(startDate &&
-          endDate && {
-            periodDate: {
-              gte: new Date(startDate),
-              lte: new Date(endDate),
-            },
-          }),
-      },
-      include: {
+    // Build conditions
+    const conditions = [eq(dailyUpdates.userId, user.id)];
+    if (goalSetId) {
+      conditions.push(eq(dailyUpdates.userGoalSetId, goalSetId));
+    }
+    if (startDate && endDate) {
+      conditions.push(gte(dailyUpdates.periodDate, startDate));
+      conditions.push(lte(dailyUpdates.periodDate, endDate));
+    }
+
+    const updates = await db.query.dailyUpdates.findMany({
+      where: and(...conditions),
+      with: {
         extractedActivities: {
-          include: {
+          with: {
             linkedGoal: true,
           },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [desc(dailyUpdates.createdAt)],
     });
 
     return NextResponse.json({ updates });
@@ -66,11 +69,11 @@ export async function POST(request: Request) {
     const validated = createUpdateSchema.parse(body);
 
     // Verify goal set ownership
-    const goalSet = await prisma.userGoalSet.findFirst({
-      where: {
-        id: validated.goalSetId,
-        userId: user.id,
-      },
+    const goalSet = await db.query.userGoalSets.findFirst({
+      where: and(
+        eq(userGoalSets.id, validated.goalSetId),
+        eq(userGoalSets.userId, user.id)
+      ),
     });
 
     if (!goalSet) {
@@ -78,13 +81,14 @@ export async function POST(request: Request) {
     }
 
     // Check for existing update in same period
-    const existingUpdate = await prisma.dailyUpdate.findFirst({
-      where: {
-        userId: user.id,
-        userGoalSetId: validated.goalSetId,
-        updatePeriod: validated.updatePeriod,
-        periodDate: validated.periodDate,
-      },
+    const periodDateStr = validated.periodDate.toISOString().split("T")[0];
+    const existingUpdate = await db.query.dailyUpdates.findFirst({
+      where: and(
+        eq(dailyUpdates.userId, user.id),
+        eq(dailyUpdates.userGoalSetId, validated.goalSetId),
+        eq(dailyUpdates.updatePeriod, validated.updatePeriod),
+        eq(dailyUpdates.periodDate, periodDateStr)
+      ),
     });
 
     if (existingUpdate) {
@@ -96,15 +100,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const update = await prisma.dailyUpdate.create({
-      data: {
+    const [update] = await db
+      .insert(dailyUpdates)
+      .values({
+        id: createId(),
         userId: user.id,
         userGoalSetId: validated.goalSetId,
         updateText: validated.updateText,
         updatePeriod: validated.updatePeriod,
-        periodDate: validated.periodDate,
-      },
-    });
+        periodDate: periodDateStr,
+      })
+      .returning();
 
     // Update user streak
     await updateStreak(user.id);
@@ -116,22 +122,22 @@ export async function POST(request: Request) {
 }
 
 async function updateStreak(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: {
       streakCurrent: true,
       streakLongest: true,
       streakLastUpdate: true,
     },
   });
 
-  if (!user) return;
+  if (!dbUser) return;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const lastUpdate = user.streakLastUpdate
-    ? new Date(user.streakLastUpdate)
+  const lastUpdate = dbUser.streakLastUpdate
+    ? new Date(dbUser.streakLastUpdate)
     : null;
 
   if (lastUpdate) {
@@ -145,36 +151,36 @@ async function updateStreak(userId: string) {
       return;
     } else if (daysDiff === 1) {
       // Consecutive day, increment streak
-      const newStreak = user.streakCurrent + 1;
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
+      const newStreak = dbUser.streakCurrent + 1;
+      await db
+        .update(users)
+        .set({
           streakCurrent: newStreak,
-          streakLongest: Math.max(newStreak, user.streakLongest),
+          streakLongest: Math.max(newStreak, dbUser.streakLongest),
           streakLastUpdate: today,
-          totalPoints: { increment: 20 }, // Points for daily update
-        },
-      });
+          totalPoints: sql`${users.totalPoints} + 20`,
+        })
+        .where(eq(users.id, userId));
     } else {
       // Streak broken, reset to 1
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
+      await db
+        .update(users)
+        .set({
           streakCurrent: 1,
           streakLastUpdate: today,
-          totalPoints: { increment: 20 },
-        },
-      });
+          totalPoints: sql`${users.totalPoints} + 20`,
+        })
+        .where(eq(users.id, userId));
     }
   } else {
     // First update ever
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
+    await db
+      .update(users)
+      .set({
         streakCurrent: 1,
         streakLastUpdate: today,
-        totalPoints: { increment: 20 },
-      },
-    });
+        totalPoints: sql`${users.totalPoints} + 20`,
+      })
+      .where(eq(users.id, userId));
   }
 }

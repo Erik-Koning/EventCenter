@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, gte, lte, isNull, desc } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users, extractedActivities } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -41,24 +43,26 @@ export async function GET(request: Request) {
   try {
     const startDate = new Date(year, 0, 1);
     const endDate = new Date(year, 11, 31, 23, 59, 59);
+    const startDateStr = startDate.toISOString().split("T")[0];
+    const endDateStr = endDate.toISOString().split("T")[0];
 
     // Get all activities for user where teamId IS NULL (personal/unassigned activities)
-    const activities = await prisma.extractedActivity.findMany({
-      where: {
-        userId: user.id,
-        teamId: null, // Only activities not assigned to any team
-        activityDate: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      select: {
-        activityType: true,
-        quantity: true,
-        activityDate: true,
-        summary: true,
-      },
-    });
+    const activities = await db
+      .select({
+        activityType: extractedActivities.activityType,
+        quantity: extractedActivities.quantity,
+        activityDate: extractedActivities.activityDate,
+        summary: extractedActivities.summary,
+      })
+      .from(extractedActivities)
+      .where(
+        and(
+          eq(extractedActivities.userId, user.id),
+          isNull(extractedActivities.teamId),
+          gte(extractedActivities.activityDate, startDateStr),
+          lte(extractedActivities.activityDate, endDateStr)
+        )
+      );
 
     // Initialize monthly stats
     const monthlyStats: MonthlyStats[] = [];
@@ -105,30 +109,30 @@ export async function GET(request: Request) {
     }
 
     // Get recent activities for detail view (last 50)
-    const recentActivities = await prisma.extractedActivity.findMany({
-      where: {
-        userId: user.id,
-        teamId: null,
-        activityDate: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      orderBy: { activityDate: "desc" },
-      take: 50,
-      select: {
-        id: true,
-        activityType: true,
-        quantity: true,
-        summary: true,
-        activityDate: true,
-      },
-    });
+    const recentActivities = await db
+      .select({
+        id: extractedActivities.id,
+        activityType: extractedActivities.activityType,
+        quantity: extractedActivities.quantity,
+        summary: extractedActivities.summary,
+        activityDate: extractedActivities.activityDate,
+      })
+      .from(extractedActivities)
+      .where(
+        and(
+          eq(extractedActivities.userId, user.id),
+          isNull(extractedActivities.teamId),
+          gte(extractedActivities.activityDate, startDateStr),
+          lte(extractedActivities.activityDate, endDateStr)
+        )
+      )
+      .orderBy(desc(extractedActivities.activityDate))
+      .limit(50);
 
     // Get user info
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { name: true, activeTeamId: true },
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
+      columns: { name: true, activeTeamId: true },
     });
 
     return NextResponse.json({
@@ -143,7 +147,7 @@ export async function GET(request: Request) {
         activityType: a.activityType,
         quantity: Number(a.quantity),
         summary: a.summary,
-        activityDate: a.activityDate.toISOString(),
+        activityDate: a.activityDate,
       })),
       activityCount: activities.length,
     });

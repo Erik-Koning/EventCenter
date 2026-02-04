@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { notificationSettings } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 const updateSettingsSchema = z.object({
   progressReminderEnabled: z.boolean().optional(),
@@ -24,17 +27,20 @@ export async function GET() {
   const { user } = authResult;
 
   try {
-    let settings = await prisma.notificationSettings.findUnique({
-      where: { userId: user.id },
+    let settings = await db.query.notificationSettings.findFirst({
+      where: eq(notificationSettings.userId, user.id),
     });
 
     // Create default settings if none exist
     if (!settings) {
-      settings = await prisma.notificationSettings.create({
-        data: {
+      const [newSettings] = await db
+        .insert(notificationSettings)
+        .values({
+          id: createId(),
           userId: user.id,
-        },
-      });
+        })
+        .returning();
+      settings = newSettings;
     }
 
     return NextResponse.json(settings);
@@ -55,14 +61,35 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const validated = updateSettingsSchema.parse(body);
 
-    const settings = await prisma.notificationSettings.upsert({
-      where: { userId: user.id },
-      update: validated,
-      create: {
-        userId: user.id,
-        ...validated,
-      },
+    // Check if settings exist
+    const existing = await db.query.notificationSettings.findFirst({
+      where: eq(notificationSettings.userId, user.id),
     });
+
+    let settings;
+    if (existing) {
+      // Update existing settings
+      const [updated] = await db
+        .update(notificationSettings)
+        .set({
+          ...validated,
+          updatedAt: new Date(),
+        })
+        .where(eq(notificationSettings.userId, user.id))
+        .returning();
+      settings = updated;
+    } else {
+      // Create new settings
+      const [created] = await db
+        .insert(notificationSettings)
+        .values({
+          id: createId(),
+          userId: user.id,
+          ...validated,
+        })
+        .returning();
+      settings = created;
+    }
 
     return NextResponse.json(settings);
   } catch (error) {

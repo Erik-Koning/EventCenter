@@ -59,12 +59,18 @@ export function LoginForm({
         onRequest: (ctx) => {
           setLoading(true);
         },
-        onSuccess: (ctx) => {
-          // redirect to the dashboard
-          //alert("Logged in successfully");
+        onSuccess: () => {
+          router.push("/dashboard");
         },
         onError: (ctx) => {
-          // display the error message
+          // Better Auth returns a specific error for 2FA-required accounts
+          if (
+            ctx.error.status === 302 ||
+            ctx.error.message?.includes("two-factor")
+          ) {
+            router.push("/auth/two-factor");
+            return;
+          }
           setError(ctx.error.message);
           setLoading(false);
         },
@@ -126,9 +132,6 @@ export function LoginForm({
                   ) : (
                     "Login"
                   )}
-                </Button>
-                <Button variant="outline" className="w-full">
-                  Login with Google
                 </Button>
               </div>
             </div>

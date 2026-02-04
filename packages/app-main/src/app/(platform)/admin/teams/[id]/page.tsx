@@ -6,6 +6,13 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/components/ui/card";
 import { Button } from "@common/components/ui/Button";
 import { Skeleton } from "@/src/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/src/components/ui/select";
 import { AddMemberDialog } from "@/components/admin/teams/AddMemberDialog";
 import { InviteMemberDialog } from "@/components/admin/teams/InviteMemberDialog";
 import { TeamMembersList } from "@/components/admin/teams/TeamMembersList";
@@ -25,7 +32,7 @@ import {
   IconTrash,
   IconLoader2,
   IconChartBar,
-  IconEdit,
+  IconSwitchHorizontal,
 } from "@tabler/icons-react";
 import { useUserStore } from "@/lib/stores/userStore";
 
@@ -66,6 +73,11 @@ interface Team {
   invitations: TeamInvitation[];
 }
 
+interface ManageableTeam {
+  id: string;
+  name: string;
+}
+
 interface PageProps {
   params: Promise<{ id: string }>;
 }
@@ -77,6 +89,7 @@ export default function TeamDetailPage({ params }: PageProps) {
   const [team, setTeam] = useState<Team | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [manageableTeams, setManageableTeams] = useState<ManageableTeam[]>([]);
 
   // Get current user's role in this team
   const currentUserRole = team?.members.find(
@@ -89,7 +102,7 @@ export default function TeamDetailPage({ params }: PageProps) {
       if (response.ok) {
         const data = await response.json();
         setTeam(data);
-      } else if (response.status === 404) {
+      } else if (response.status === 404 || response.status === 403) {
         router.push("/admin/teams");
       }
     } catch (error) {
@@ -99,8 +112,23 @@ export default function TeamDetailPage({ params }: PageProps) {
     }
   };
 
+  const loadManageableTeams = async () => {
+    try {
+      const response = await fetch("/api/admin/teams");
+      if (response.ok) {
+        const data = await response.json();
+        setManageableTeams(
+          data.teams.map((t: ManageableTeam) => ({ id: t.id, name: t.name }))
+        );
+      }
+    } catch (error) {
+      console.error("Failed to load manageable teams:", error);
+    }
+  };
+
   useEffect(() => {
     loadTeam();
+    loadManageableTeams();
   }, [id]);
 
   const handleDeleteTeam = async () => {
@@ -116,6 +144,12 @@ export default function TeamDetailPage({ params }: PageProps) {
       console.error("Failed to delete team:", error);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleTeamSwitch = (newTeamId: string) => {
+    if (newTeamId !== id) {
+      router.push(`/admin/teams/${newTeamId}`);
     }
   };
 
@@ -141,6 +175,7 @@ export default function TeamDetailPage({ params }: PageProps) {
   }
 
   const existingMemberIds = team.members.map((m) => m.user.id);
+  const isOwner = currentUserRole === "owner";
 
   return (
     <div className="container py-8">
@@ -152,6 +187,25 @@ export default function TeamDetailPage({ params }: PageProps) {
         <IconArrowLeft className="h-4 w-4" />
         Back to Teams
       </Link>
+
+      {/* Team Switcher */}
+      {manageableTeams.length > 1 && (
+        <div className="flex items-center gap-2 mb-6">
+          <IconSwitchHorizontal className="h-4 w-4 text-muted-foreground" />
+          <Select value={id} onValueChange={handleTeamSwitch}>
+            <SelectTrigger className="w-[250px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {manageableTeams.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
@@ -174,36 +228,38 @@ export default function TeamDetailPage({ params }: PageProps) {
             </Button>
           </Link>
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" className="gap-2" disabled={isDeleting}>
-                {isDeleting ? (
-                  <IconLoader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <IconTrash className="h-4 w-4" />
-                )}
-                Delete Team
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Team</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete "{team.name}"? This action cannot be
-                  undone. All team members will be removed.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDeleteTeam}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {isOwner && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="gap-2" disabled={isDeleting}>
+                  {isDeleting ? (
+                    <IconLoader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <IconTrash className="h-4 w-4" />
+                  )}
+                  Delete Team
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Team</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete &quot;{team.name}&quot;? This action cannot be
+                    undone. All team members will be removed.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteTeam}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 

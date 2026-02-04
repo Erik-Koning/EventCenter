@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, notInArray, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import {
+  users,
+  achievements,
+  userAchievements,
+  extractedActivities,
+  goals,
+  userGoalSets,
+} from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 /**
  * GET /api/achievements - Get all achievements and user's earned ones
@@ -13,33 +23,36 @@ export async function GET() {
 
   try {
     // Get all active achievements
-    const achievements = await prisma.achievement.findMany({
-      where: { isActive: true },
-      orderBy: [{ category: "asc" }, { points: "desc" }],
+    const allAchievements = await db.query.achievements.findMany({
+      where: eq(achievements.isActive, true),
+      orderBy: [achievements.category, achievements.points],
     });
 
     // Get user's earned achievements
-    const userAchievements = await prisma.userAchievement.findMany({
-      where: { userId: user.id },
-      select: { achievementId: true, earnedAt: true },
-    });
+    const earnedAchievements = await db
+      .select({
+        achievementId: userAchievements.achievementId,
+        earnedAt: userAchievements.earnedAt,
+      })
+      .from(userAchievements)
+      .where(eq(userAchievements.userId, user.id));
 
-    const earnedIds = new Set(userAchievements.map((ua) => ua.achievementId));
+    const earnedIds = new Set(earnedAchievements.map((ua) => ua.achievementId));
     const earnedMap = new Map(
-      userAchievements.map((ua) => [ua.achievementId, ua.earnedAt])
+      earnedAchievements.map((ua) => [ua.achievementId, ua.earnedAt])
     );
 
     // Combine with earned status
-    const achievementsWithStatus = achievements.map((a) => ({
+    const achievementsWithStatus = allAchievements.map((a) => ({
       ...a,
       earned: earnedIds.has(a.id),
       earnedAt: earnedMap.get(a.id) || null,
     }));
 
     // Get user stats
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
+      columns: {
         streakCurrent: true,
         streakLongest: true,
         totalPoints: true,
@@ -52,8 +65,8 @@ export async function GET() {
         currentStreak: dbUser?.streakCurrent || 0,
         longestStreak: dbUser?.streakLongest || 0,
         totalPoints: dbUser?.totalPoints || 0,
-        achievementsEarned: userAchievements.length,
-        achievementsTotal: achievements.length,
+        achievementsEarned: earnedAchievements.length,
+        achievementsTotal: allAchievements.length,
       },
     });
   } catch (error) {
@@ -81,91 +94,117 @@ async function checkAndAwardAchievements(userId: string) {
   const newlyEarned: Array<{ id: string; name: string; points: number }> = [];
 
   // Get user stats
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: {
       streakCurrent: true,
       streakLongest: true,
       totalPoints: true,
     },
   });
 
-  if (!user) return newlyEarned;
+  if (!dbUser) return newlyEarned;
 
-  // Get activity counts
-  const activityCounts = await prisma.extractedActivity.groupBy({
-    by: ["activityType"],
-    where: { userId },
-    _sum: { quantity: true },
-  });
+  // Get activity counts by type
+  const activityCounts = await db
+    .select({
+      activityType: extractedActivities.activityType,
+      totalQuantity: sql<number>`sum(${extractedActivities.quantity})`.as(
+        "totalQuantity"
+      ),
+    })
+    .from(extractedActivities)
+    .where(eq(extractedActivities.userId, userId))
+    .groupBy(extractedActivities.activityType);
 
   const activityMap = new Map(
-    activityCounts.map((ac) => [ac.activityType, Number(ac._sum.quantity) || 0])
+    activityCounts.map((ac) => [ac.activityType, Number(ac.totalQuantity) || 0])
   );
 
-  // Get goal counts
-  const completedGoals = await prisma.goal.count({
-    where: {
-      userGoalSet: { userId },
-      validationStatus: "valid",
-    },
-  });
+  // Get goal counts - completed goals through userGoalSet
+  const [completedGoalsResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(goals)
+    .innerJoin(userGoalSets, eq(goals.userGoalSetId, userGoalSets.id))
+    .where(
+      and(eq(userGoalSets.userId, userId), eq(goals.validationStatus, "valid"))
+    );
+  const completedGoals = Number(completedGoalsResult?.count || 0);
 
-  const goalSetsCreated = await prisma.userGoalSet.count({
-    where: { userId },
-  });
+  // Get goal sets created count
+  const [goalSetsResult] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(userGoalSets)
+    .where(eq(userGoalSets.userId, userId));
+  const goalSetsCreated = Number(goalSetsResult?.count || 0);
 
   // Get unearned achievements
-  const earnedIds = (
-    await prisma.userAchievement.findMany({
-      where: { userId },
-      select: { achievementId: true },
-    })
-  ).map((ua) => ua.achievementId);
+  const earnedIds = await db
+    .select({ achievementId: userAchievements.achievementId })
+    .from(userAchievements)
+    .where(eq(userAchievements.userId, userId));
 
-  const unearnedAchievements = await prisma.achievement.findMany({
-    where: {
-      isActive: true,
-      id: { notIn: earnedIds },
-    },
-  });
+  const earnedIdList = earnedIds.map((e) => e.achievementId);
+
+  let unearnedAchievements;
+  if (earnedIdList.length > 0) {
+    unearnedAchievements = await db.query.achievements.findMany({
+      where: and(
+        eq(achievements.isActive, true),
+        notInArray(achievements.id, earnedIdList)
+      ),
+    });
+  } else {
+    unearnedAchievements = await db.query.achievements.findMany({
+      where: eq(achievements.isActive, true),
+    });
+  }
 
   // Check each achievement
   for (const achievement of unearnedAchievements) {
-    const criteria = JSON.parse(achievement.criteria);
+    const criteria = achievement.criteria;
     let earned = false;
 
     switch (criteria.type) {
       case "streak":
-        earned =
-          user.streakCurrent >= criteria.days ||
-          user.streakLongest >= criteria.days;
+        if (criteria.days) {
+          earned =
+            dbUser.streakCurrent >= criteria.days ||
+            dbUser.streakLongest >= criteria.days;
+        }
         break;
       case "goals_completed":
-        earned = completedGoals >= criteria.count;
+        if (criteria.count) {
+          earned = completedGoals >= criteria.count;
+        }
         break;
       case "goal_sets_created":
-        earned = goalSetsCreated >= criteria.count;
+        if (criteria.count) {
+          earned = goalSetsCreated >= criteria.count;
+        }
         break;
       case "activity":
-        const count = activityMap.get(criteria.activityType) || 0;
-        earned = count >= criteria.count;
+        if (criteria.count && criteria.activityType) {
+          const count = activityMap.get(criteria.activityType) || 0;
+          earned = count >= criteria.count;
+        }
         break;
     }
 
     if (earned) {
-      await prisma.userAchievement.create({
-        data: {
-          userId,
-          achievementId: achievement.id,
-        },
+      await db.insert(userAchievements).values({
+        id: createId(),
+        userId,
+        achievementId: achievement.id,
       });
 
       // Award points
-      await prisma.user.update({
-        where: { id: userId },
-        data: { totalPoints: { increment: achievement.points } },
-      });
+      await db
+        .update(users)
+        .set({
+          totalPoints: sql`${users.totalPoints} + ${achievement.points}`,
+        })
+        .where(eq(users.id, userId));
 
       newlyEarned.push({
         id: achievement.id,

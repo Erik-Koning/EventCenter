@@ -8,7 +8,7 @@ Good to know: Starting with Next.js 16, Middleware is now called Proxy to better
 Proxy allows you to run code before a request is completed. Then, based on the incoming request, you can modify the response by rewriting, redirecting, modifying the request or response headers, or responding directly.
 */
 
-const PUBLIC_ROUTES = ["/login", "/signup", "/verify-email"];
+const PUBLIC_ROUTES = ["/login", "/signup", "/verify-email", "/auth/two-factor"];
 
 export async function proxy(request: NextRequest) {
 	const session = await auth.api.getSession({

@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -153,12 +154,25 @@ class ChatMessage(BaseModel):
     content: str = Field(..., description="Message content")
 
 
+class TeamMemberInfo(BaseModel):
+    """Team member info for event attendee matching."""
+
+    user_id: str
+    name: str
+
+
 class ConversationalUpdateRequest(BaseModel):
     """Request schema for conversational update extraction."""
 
     session_id: str = Field(..., description="Unique session ID for chat history")
     user_message: str = Field(..., description="User's message in the conversation")
     user_timezone: str = Field(default="UTC", description="User's timezone for date inference")
+    # Optional team context for calendar sub-agent routing
+    team_id: Optional[str] = Field(default=None, description="Team ID (needed for event creation)")
+    user_id: Optional[str] = Field(default=None, description="User ID (needed for event creation)")
+    team_members: list[TeamMemberInfo] = Field(
+        default_factory=list, description="Team members for attendee matching"
+    )
 
 
 class ConversationalUpdateResponse(BaseModel):
@@ -195,4 +209,21 @@ class ConversationalUpdateResponse(BaseModel):
     followup_confirmation_result: Optional[FollowUpConfirmationResult] = Field(
         default=None,
         description="Result when user confirms/dismisses follow-ups"
+    )
+    # Calendar sub-agent fields (populated when event intent detected)
+    event_action: Optional[str] = Field(
+        default=None,
+        description="Event action type: create | modify | cancel | None"
+    )
+    created_events: list[dict] = Field(
+        default_factory=list,
+        description="Events created by the calendar sub-agent"
+    )
+    modifications: list[dict] = Field(
+        default_factory=list,
+        description="Event modifications from the calendar sub-agent"
+    )
+    cancelled_event_ids: list[str] = Field(
+        default_factory=list,
+        description="Event IDs cancelled by the calendar sub-agent"
     )

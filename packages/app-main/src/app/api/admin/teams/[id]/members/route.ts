@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { teams, teamMembers, users } from "@/db/schema";
 import { z } from "zod";
-import { requireAuth, Role } from "@/lib/authorization";
+import { requireAuth } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
 import { sendTeamAddedEmail } from "@common/server/emails/sendTeamAddedEmail";
 import { isTeamOwner, isTeamManager } from "@/lib/team-authorization";
+import { createId } from "@/lib/utils";
+import { logAuditEvent } from "@/lib/audit";
 
 const addMemberSchema = z.object({
   userId: z.string(),
@@ -25,22 +29,35 @@ interface RouteParams {
 }
 
 /**
- * POST /api/admin/teams/[id]/members - Add existing user to team
+ * POST /api/admin/teams/[id]/members - Add existing user to team.
+ * Allowed for team managers (owner/admin) or system admins.
  */
 export async function POST(request: Request, { params }: RouteParams) {
-  const authResult = await requireAuth({ permissions: { role: Role.ADMIN } });
+  const authResult = await requireAuth();
   if (!authResult.success) return authResult.response;
   const { user: adminUser } = authResult;
 
   const { id: teamId } = await params;
 
   try {
+    // Check authorization: team manager or system admin
+    const managerCheck = await isTeamManager(teamId, adminUser.id);
+    const isSystemAdmin = adminUser.role === "admin";
+
+    if (!managerCheck && !isSystemAdmin) {
+      return apiError(
+        "Only team managers or system admins can add members",
+        ErrorCode.FORBIDDEN,
+        403
+      );
+    }
+
     const body = await request.json();
     const validated = addMemberSchema.parse(body);
 
     // Verify team exists
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
+    const team = await db.query.teams.findFirst({
+      where: eq(teams.id, teamId),
     });
 
     if (!team) {
@@ -48,9 +65,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Verify user exists
-    const userToAdd = await prisma.user.findUnique({
-      where: { id: validated.userId },
-      select: { id: true, email: true, name: true },
+    const userToAdd = await db.query.users.findFirst({
+      where: eq(users.id, validated.userId),
+      columns: { id: true, email: true, name: true },
     });
 
     if (!userToAdd) {
@@ -58,29 +75,38 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check if already a member
-    const existingMember = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId,
-          userId: validated.userId,
-        },
-      },
+    const existingMember = await db.query.teamMembers.findFirst({
+      where: and(
+        eq(teamMembers.teamId, teamId),
+        eq(teamMembers.userId, validated.userId)
+      ),
     });
 
     if (existingMember) {
-      return apiError("User is already a member of this team", ErrorCode.VALIDATION_ERROR, 409);
+      return apiError(
+        "User is already a member of this team",
+        ErrorCode.VALIDATION_ERROR,
+        409
+      );
     }
 
     // Add member
-    const member = await prisma.teamMember.create({
-      data: {
+    const [member] = await db
+      .insert(teamMembers)
+      .values({
+        id: createId(),
         teamId,
         userId: validated.userId,
         role: validated.role,
-      },
-      include: {
+      })
+      .returning();
+
+    // Get member with user info
+    const memberWithUser = await db.query.teamMembers.findFirst({
+      where: eq(teamMembers.id, member.id),
+      with: {
         user: {
-          select: { id: true, name: true, email: true, image: true },
+          columns: { id: true, name: true, email: true, image: true },
         },
       },
     });
@@ -98,28 +124,49 @@ export async function POST(request: Request, { params }: RouteParams) {
       // Don't fail the request if email fails
     }
 
-    return NextResponse.json(member, { status: 201 });
+    await logAuditEvent({
+      userId: adminUser.id,
+      action: "team_member_add",
+      resource: "team",
+      resourceId: teamId,
+      details: { addedUserId: validated.userId, role: validated.role },
+    });
+
+    return NextResponse.json(memberWithUser, { status: 201 });
   } catch (error) {
     return handleApiError(error, "admin/teams/[id]/members:POST");
   }
 }
 
 /**
- * DELETE /api/admin/teams/[id]/members - Remove member from team
+ * DELETE /api/admin/teams/[id]/members - Remove member from team.
+ * Allowed for team managers (owner/admin) or system admins.
  */
 export async function DELETE(request: Request, { params }: RouteParams) {
-  const authResult = await requireAuth({ permissions: { role: Role.ADMIN } });
+  const authResult = await requireAuth();
   if (!authResult.success) return authResult.response;
 
   const { id: teamId } = await params;
 
   try {
+    // Check authorization: team manager or system admin
+    const managerCheck = await isTeamManager(teamId, authResult.user.id);
+    const isSystemAdmin = authResult.user.role === "admin";
+
+    if (!managerCheck && !isSystemAdmin) {
+      return apiError(
+        "Only team managers or system admins can remove members",
+        ErrorCode.FORBIDDEN,
+        403
+      );
+    }
+
     const body = await request.json();
     const validated = removeMemberSchema.parse(body);
 
     // Verify team exists
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
+    const team = await db.query.teams.findFirst({
+      where: eq(teams.id, teamId),
     });
 
     if (!team) {
@@ -127,13 +174,11 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     }
 
     // Check if member exists
-    const member = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId,
-          userId: validated.userId,
-        },
-      },
+    const member = await db.query.teamMembers.findFirst({
+      where: and(
+        eq(teamMembers.teamId, teamId),
+        eq(teamMembers.userId, validated.userId)
+      ),
     });
 
     if (!member) {
@@ -145,13 +190,21 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return apiError("Cannot remove the team owner", ErrorCode.FORBIDDEN, 403);
     }
 
-    await prisma.teamMember.delete({
-      where: {
-        teamId_userId: {
-          teamId,
-          userId: validated.userId,
-        },
-      },
+    await db
+      .delete(teamMembers)
+      .where(
+        and(
+          eq(teamMembers.teamId, teamId),
+          eq(teamMembers.userId, validated.userId)
+        )
+      );
+
+    await logAuditEvent({
+      userId: authResult.user.id,
+      action: "team_member_remove",
+      resource: "team",
+      resourceId: teamId,
+      details: { removedUserId: validated.userId },
     });
 
     return NextResponse.json({ success: true });
@@ -162,7 +215,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
 /**
  * PATCH /api/admin/teams/[id]/members - Update member role
- * Only team owners can change roles. System admins can also change roles.
+ * Team admins/owners and system admins can change roles.
+ * Ownership transfer requires team owner or system admin specifically.
  */
 export async function PATCH(request: Request, { params }: RouteParams) {
   const authResult = await requireAuth();
@@ -176,34 +230,33 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const validated = updateRoleSchema.parse(body);
 
     // Verify team exists
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
+    const team = await db.query.teams.findFirst({
+      where: eq(teams.id, teamId),
     });
 
     if (!team) {
       return apiError("Team not found", ErrorCode.NOT_FOUND, 404);
     }
 
-    // Check authorization - must be team owner or system admin
+    // Check authorization - must be team admin/owner or system admin
+    const isManager = await isTeamManager(teamId, currentUser.id);
     const isOwner = await isTeamOwner(teamId, currentUser.id);
     const isSystemAdmin = currentUser.role === "admin";
 
-    if (!isOwner && !isSystemAdmin) {
+    if (!isManager && !isSystemAdmin) {
       return apiError(
-        "Only team owners can change member roles",
+        "Only team admins, owners, or system admins can change member roles",
         ErrorCode.FORBIDDEN,
         403
       );
     }
 
     // Get the member to update
-    const memberToUpdate = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId,
-          userId: validated.userId,
-        },
-      },
+    const memberToUpdate = await db.query.teamMembers.findFirst({
+      where: and(
+        eq(teamMembers.teamId, teamId),
+        eq(teamMembers.userId, validated.userId)
+      ),
     });
 
     if (!memberToUpdate) {
@@ -222,23 +275,24 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       }
 
       // Transfer ownership in a transaction
-      await prisma.$transaction([
+      await db.transaction(async (tx) => {
         // Demote current owner to admin
-        prisma.teamMember.updateMany({
-          where: { teamId, role: "owner" },
-          data: { role: "admin" },
-        }),
+        await tx
+          .update(teamMembers)
+          .set({ role: "admin" })
+          .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, "owner")));
+
         // Promote new owner
-        prisma.teamMember.update({
-          where: {
-            teamId_userId: {
-              teamId,
-              userId: validated.userId,
-            },
-          },
-          data: { role: "owner" },
-        }),
-      ]);
+        await tx
+          .update(teamMembers)
+          .set({ role: "owner" })
+          .where(
+            and(
+              eq(teamMembers.teamId, teamId),
+              eq(teamMembers.userId, validated.userId)
+            )
+          );
+      });
     } else {
       // Prevent demoting the owner without transferring ownership
       if (memberToUpdate.role === "owner") {
@@ -250,16 +304,28 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       }
 
       // Update role
-      await prisma.teamMember.update({
-        where: {
-          teamId_userId: {
-            teamId,
-            userId: validated.userId,
-          },
-        },
-        data: { role: validated.role },
-      });
+      await db
+        .update(teamMembers)
+        .set({ role: validated.role })
+        .where(
+          and(
+            eq(teamMembers.teamId, teamId),
+            eq(teamMembers.userId, validated.userId)
+          )
+        );
     }
+
+    await logAuditEvent({
+      userId: currentUser.id,
+      action: validated.role === "owner" ? "team_ownership_transfer" : "team_role_change",
+      resource: "team",
+      resourceId: teamId,
+      details: {
+        targetUserId: validated.userId,
+        previousRole: memberToUpdate.role,
+        newRole: validated.role,
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

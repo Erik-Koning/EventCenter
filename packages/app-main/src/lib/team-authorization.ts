@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { eq, and } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { teamMembers } from "@/db/schema";
 
 /**
  * Check if a user has manager permissions (admin or owner) for a team
@@ -7,10 +9,10 @@ export async function isTeamManager(
   teamId: string,
   userId: string
 ): Promise<boolean> {
-  const membership = await prisma.teamMember.findUnique({
-    where: { teamId_userId: { teamId, userId } },
+  const membership = await db.query.teamMembers.findFirst({
+    where: and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)),
   });
-  return membership !== null && ["owner", "admin"].includes(membership.role);
+  return !!membership && ["owner", "admin"].includes(membership.role);
 }
 
 /**
@@ -20,8 +22,8 @@ export async function isTeamOwner(
   teamId: string,
   userId: string
 ): Promise<boolean> {
-  const membership = await prisma.teamMember.findUnique({
-    where: { teamId_userId: { teamId, userId } },
+  const membership = await db.query.teamMembers.findFirst({
+    where: and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)),
   });
   return membership?.role === "owner";
 }
@@ -33,10 +35,10 @@ export async function isTeamMember(
   teamId: string,
   userId: string
 ): Promise<boolean> {
-  const membership = await prisma.teamMember.findUnique({
-    where: { teamId_userId: { teamId, userId } },
+  const membership = await db.query.teamMembers.findFirst({
+    where: and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)),
   });
-  return membership !== null;
+  return !!membership;
 }
 
 /**
@@ -46,8 +48,8 @@ export async function getTeamRole(
   teamId: string,
   userId: string
 ): Promise<string | null> {
-  const membership = await prisma.teamMember.findUnique({
-    where: { teamId_userId: { teamId, userId } },
+  const membership = await db.query.teamMembers.findFirst({
+    where: and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)),
   });
   return membership?.role || null;
 }

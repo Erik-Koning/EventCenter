@@ -277,9 +277,9 @@ export default function TeamStatsPage({ params }: PageProps) {
 
       {isLoading ? (
         <div className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {[1, 2, 3, 4, 5].map((i) => (
-              <Card key={i}>
+              <Card key={i} className="min-w-[160px]">
                 <CardContent className="p-4">
                   <Skeleton className="h-8 w-12 mb-2" />
                   <Skeleton className="h-4 w-24" />
@@ -296,12 +296,12 @@ export default function TeamStatsPage({ params }: PageProps) {
       ) : stats ? (
         <div className="space-y-6">
           {/* Category Summary Cards */}
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {categoryConfig.map((cat) => {
               const Icon = cat.icon;
               const value = stats.teamTotals[cat.key as keyof typeof stats.teamTotals];
               return (
-                <Card key={cat.key}>
+                <Card key={cat.key} className="min-w-[160px]">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className={cn("rounded-lg p-2", cat.color)}>

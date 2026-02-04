@@ -1,7 +1,7 @@
 import { ChatInterface } from "@/components/chat/ChatInterface";
 
 export const metadata = {
-  title: "Chat | Chat Assistant",
+  title: "Chat | Clio",
   description: "Chat with the AI assistant",
 };
 

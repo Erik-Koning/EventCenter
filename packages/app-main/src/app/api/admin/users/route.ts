@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, or, like, desc, sql, count } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users, userGoalSets, dailyUpdates, userAchievements } from "@/db/schema";
 import { requireAuth, Role } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -16,45 +18,72 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get("limit") || "20");
     const search = searchParams.get("search") || "";
 
-    const where = search
-      ? {
-          OR: [
-            { name: { contains: search } },
-            { email: { contains: search } },
-          ],
-        }
-      : {};
+    // Build where condition for search
+    const whereCondition = search
+      ? or(
+          like(users.name, `%${search}%`),
+          like(users.email, `%${search}%`)
+        )
+      : undefined;
 
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          image: true,
-          streakCurrent: true,
-          streakLongest: true,
-          totalPoints: true,
-          createdAt: true,
+    // Get users with pagination
+    const usersList = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        image: users.image,
+        streakCurrent: users.streakCurrent,
+        streakLongest: users.streakLongest,
+        totalPoints: users.totalPoints,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(whereCondition)
+      .orderBy(desc(users.createdAt))
+      .offset((page - 1) * limit)
+      .limit(limit);
+
+    // Get counts for each user
+    const usersWithCounts = await Promise.all(
+      usersList.map(async (user) => {
+        const [goalSetsCount] = await db
+          .select({ count: count() })
+          .from(userGoalSets)
+          .where(eq(userGoalSets.userId, user.id));
+
+        const [dailyUpdatesCount] = await db
+          .select({ count: count() })
+          .from(dailyUpdates)
+          .where(eq(dailyUpdates.userId, user.id));
+
+        const [achievementsCount] = await db
+          .select({ count: count() })
+          .from(userAchievements)
+          .where(eq(userAchievements.userId, user.id));
+
+        return {
+          ...user,
           _count: {
-            select: {
-              goalSets: true,
-              dailyUpdates: true,
-              userAchievements: true,
-            },
+            goalSets: Number(goalSetsCount?.count || 0),
+            dailyUpdates: Number(dailyUpdatesCount?.count || 0),
+            userAchievements: Number(achievementsCount?.count || 0),
           },
-        },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.user.count({ where }),
-    ]);
+        };
+      })
+    );
+
+    // Get total count
+    const [totalResult] = await db
+      .select({ count: count() })
+      .from(users)
+      .where(whereCondition);
+
+    const total = Number(totalResult?.count || 0);
 
     return NextResponse.json({
-      users,
+      users: usersWithCounts,
       pagination: {
         page,
         limit,

@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, desc } from "drizzle-orm";
+import { db } from "@/lib/db";
+import {
+  users,
+  userGoalSets,
+  goals,
+  goalProgressEstimates,
+  dailyUpdates,
+  extractedActivities,
+  userAchievements,
+  notificationSettings,
+} from "@/db/schema";
 import { z } from "zod";
 import { requireAuth, Role } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
+import { logAuditEvent } from "@/lib/audit";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -12,6 +24,7 @@ const updateUserSchema = z.object({
   role: z.enum(["user", "admin"]).optional(),
   streakCurrent: z.number().min(0).optional(),
   totalPoints: z.number().min(0).optional(),
+  blocked: z.boolean().optional(),
 });
 
 /**
@@ -24,41 +37,59 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
-    const user = await prisma.user.findUnique({
-      where: { id },
-      include: {
-        goalSets: {
-          orderBy: { createdAt: "desc" },
-          include: {
-            goals: {
-              orderBy: { goalOrder: "asc" },
-              include: {
-                progressEstimates: true,
-              },
-            },
-          },
-        },
-        dailyUpdates: {
-          orderBy: { createdAt: "desc" },
-          take: 20,
-          include: {
-            extractedActivities: true,
-          },
-        },
-        userAchievements: {
-          include: {
-            achievement: true,
-          },
-        },
-        notificationSettings: true,
-      },
+    // Get user with all related data
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, id),
     });
 
-    if (!user) {
+    if (!dbUser) {
       return apiError("User not found", ErrorCode.NOT_FOUND, 404);
     }
 
-    return NextResponse.json(user);
+    // Get goal sets with goals and progress estimates
+    const goalSets = await db.query.userGoalSets.findMany({
+      where: eq(userGoalSets.userId, id),
+      orderBy: [desc(userGoalSets.createdAt)],
+      with: {
+        goals: {
+          orderBy: [goals.goalOrder],
+          with: {
+            progressEstimates: true,
+          },
+        },
+      },
+    });
+
+    // Get daily updates with extracted activities
+    const updates = await db.query.dailyUpdates.findMany({
+      where: eq(dailyUpdates.userId, id),
+      orderBy: [desc(dailyUpdates.createdAt)],
+      limit: 20,
+      with: {
+        extractedActivities: true,
+      },
+    });
+
+    // Get user achievements with achievement details
+    const achievements = await db.query.userAchievements.findMany({
+      where: eq(userAchievements.userId, id),
+      with: {
+        achievement: true,
+      },
+    });
+
+    // Get notification settings
+    const settings = await db.query.notificationSettings.findFirst({
+      where: eq(notificationSettings.userId, id),
+    });
+
+    return NextResponse.json({
+      ...dbUser,
+      goalSets,
+      dailyUpdates: updates,
+      userAchievements: achievements,
+      notificationSettings: settings,
+    });
   } catch (error) {
     return handleApiError(error, "admin/users/[id]:GET");
   }
@@ -76,12 +107,25 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const body = await request.json();
     const validated = updateUserSchema.parse(body);
 
-    const user = await prisma.user.update({
-      where: { id },
-      data: validated,
+    const [updatedUser] = await db
+      .update(users)
+      .set(validated)
+      .where(eq(users.id, id))
+      .returning();
+
+    if (!updatedUser) {
+      return apiError("User not found", ErrorCode.NOT_FOUND, 404);
+    }
+
+    await logAuditEvent({
+      userId: authResult.user.id,
+      action: "user_update",
+      resource: "user",
+      resourceId: id,
+      details: validated,
     });
 
-    return NextResponse.json(user);
+    return NextResponse.json(updatedUser);
   } catch (error) {
     return handleApiError(error, "admin/users/[id]:PUT");
   }

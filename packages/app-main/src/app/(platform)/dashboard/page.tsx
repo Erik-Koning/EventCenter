@@ -299,7 +299,7 @@ export default function DashboardPage() {
               <div className="text-center py-8 text-muted-foreground">
                 <p>No updates yet.</p>
                 <Link href="/update">
-                  <Button variant="outline" className="mt-4">
+                  <Button variant="outline" className="mt-4 px-6">
                     Log Your First Update
                   </Button>
                 </Link>

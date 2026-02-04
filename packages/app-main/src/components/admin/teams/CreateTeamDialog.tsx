@@ -58,7 +58,7 @@ export function CreateTeamDialog({ onTeamCreated }: CreateTeamDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2">
+        <Button innerClassName="gap-2 px-2">
           <IconPlus className="h-4 w-4" />
           Create Team
         </Button>
@@ -107,10 +107,11 @@ export function CreateTeamDialog({ onTeamCreated }: CreateTeamDialogProps) {
               variant="outline"
               onClick={() => setOpen(false)}
               disabled={isLoading}
+              innerClassName="px-2"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || name.length < 2}>
+            <Button type="submit" disabled={isLoading || name.length < 2} innerClassName="px-2">
               {isLoading ? (
                 <>
                   <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />

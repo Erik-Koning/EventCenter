@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, asc } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { userGoalSets, users, goals, expertReviews, goalProgressEstimates } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth, Role } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
+import { logAuditEvent } from "@/lib/audit";
 
 const approveSchema = z.object({
   goalSetId: z.string(),
@@ -22,8 +25,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = approveSchema.parse(body);
 
-    const goalSet = await prisma.userGoalSet.findUnique({
-      where: { id: validated.goalSetId },
+    const goalSet = await db.query.userGoalSets.findFirst({
+      where: eq(userGoalSets.id, validated.goalSetId),
     });
 
     if (!goalSet) {
@@ -52,14 +55,23 @@ export async function POST(request: Request) {
         break;
     }
 
-    const updatedGoalSet = await prisma.userGoalSet.update({
-      where: { id: validated.goalSetId },
-      data: {
+    const [updatedGoalSet] = await db
+      .update(userGoalSets)
+      .set({
         status: newStatus,
         approvedById: validated.action === "approve" ? user.id : null,
         approvedAt: validated.action === "approve" ? new Date() : null,
         adminComment: validated.comment,
-      },
+      })
+      .where(eq(userGoalSets.id, validated.goalSetId))
+      .returning();
+
+    await logAuditEvent({
+      userId: user.id,
+      action: `goal_set_${validated.action}`,
+      resource: "goal_set",
+      resourceId: validated.goalSetId,
+      details: { comment: validated.comment, previousStatus: goalSet.status, newStatus },
     });
 
     return NextResponse.json(updatedGoalSet);
@@ -76,21 +88,21 @@ export async function GET() {
   if (!authResult.success) return authResult.response;
 
   try {
-    const pendingGoalSets = await prisma.userGoalSet.findMany({
-      where: { status: "pending_approval" },
-      include: {
+    const pendingGoalSets = await db.query.userGoalSets.findMany({
+      where: eq(userGoalSets.status, "pending_approval"),
+      with: {
         user: {
-          select: { id: true, name: true, email: true, image: true },
+          columns: { id: true, name: true, email: true, image: true },
         },
         goals: {
-          orderBy: { goalOrder: "asc" },
-          include: {
+          orderBy: [asc(goals.goalOrder)],
+          with: {
             expertReviews: true,
             progressEstimates: true,
           },
         },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: [asc(userGoalSets.createdAt)],
     });
 
     return NextResponse.json({ pendingGoalSets });

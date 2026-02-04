@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, desc } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { userTodos } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 /**
  * GET /api/updates/todos - Get user's todos
@@ -17,20 +20,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") || "pending";
 
-    const whereClause: { userId: string; status?: string } = {
-      userId: user.id,
-    };
-
+    // Build conditions
+    const conditions = [eq(userTodos.userId, user.id)];
     if (status !== "all") {
-      whereClause.status = status;
+      conditions.push(eq(userTodos.status, status));
     }
 
-    const todos = await prisma.userTodo.findMany({
-      where: whereClause,
+    const todos = await db.query.userTodos.findMany({
+      where: and(...conditions),
       orderBy: [
-        { status: "asc" }, // pending first
-        { sortOrder: "asc" },
-        { createdAt: "desc" },
+        userTodos.status, // pending first (alphabetically before completed)
+        userTodos.sortOrder,
+        desc(userTodos.createdAt),
       ],
     });
 
@@ -66,19 +67,21 @@ export async function POST(request: Request) {
     const validated = createSchema.parse(body);
 
     // Get the highest sortOrder for this user
-    const maxOrder = await prisma.userTodo.findFirst({
-      where: { userId: user.id },
-      orderBy: { sortOrder: "desc" },
-      select: { sortOrder: true },
+    const maxOrderTodo = await db.query.userTodos.findFirst({
+      where: eq(userTodos.userId, user.id),
+      orderBy: [desc(userTodos.sortOrder)],
+      columns: { sortOrder: true },
     });
 
-    const todo = await prisma.userTodo.create({
-      data: {
+    const [todo] = await db
+      .insert(userTodos)
+      .values({
+        id: createId(),
         userId: user.id,
         content: validated.content,
-        sortOrder: (maxOrder?.sortOrder ?? -1) + 1,
-      },
-    });
+        sortOrder: (maxOrderTodo?.sortOrder ?? -1) + 1,
+      })
+      .returning();
 
     return NextResponse.json({
       success: true,
@@ -114,8 +117,8 @@ export async function PATCH(request: Request) {
     const validated = patchSchema.parse(body);
 
     // Verify todo belongs to user
-    const todo = await prisma.userTodo.findUnique({
-      where: { id: validated.todoId },
+    const todo = await db.query.userTodos.findFirst({
+      where: eq(userTodos.id, validated.todoId),
     });
 
     if (!todo) {
@@ -127,11 +130,9 @@ export async function PATCH(request: Request) {
     }
 
     // Build update data
-    const updateData: {
-      content?: string;
-      status?: string;
-      completedAt?: Date | null;
-    } = {};
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
 
     if (validated.content !== undefined) {
       updateData.content = validated.content;
@@ -142,10 +143,11 @@ export async function PATCH(request: Request) {
       updateData.completedAt = validated.status === "completed" ? new Date() : null;
     }
 
-    const updated = await prisma.userTodo.update({
-      where: { id: validated.todoId },
-      data: updateData,
-    });
+    const [updated] = await db
+      .update(userTodos)
+      .set(updateData)
+      .where(eq(userTodos.id, validated.todoId))
+      .returning();
 
     return NextResponse.json({
       success: true,
@@ -161,10 +163,6 @@ export async function PATCH(request: Request) {
     return handleApiError(error, "updates/todos:PATCH");
   }
 }
-
-const deleteSchema = z.object({
-  todoId: z.string(),
-});
 
 /**
  * DELETE /api/updates/todos - Delete a todo
@@ -183,8 +181,8 @@ export async function DELETE(request: Request) {
     }
 
     // Verify todo belongs to user
-    const todo = await prisma.userTodo.findUnique({
-      where: { id: todoId },
+    const todo = await db.query.userTodos.findFirst({
+      where: eq(userTodos.id, todoId),
     });
 
     if (!todo) {
@@ -195,9 +193,9 @@ export async function DELETE(request: Request) {
       return apiError("Unauthorized", ErrorCode.FORBIDDEN, 403);
     }
 
-    await prisma.userTodo.delete({
-      where: { id: todoId },
-    });
+    await db
+      .delete(userTodos)
+      .where(eq(userTodos.id, todoId));
 
     return NextResponse.json({ success: true });
   } catch (error) {

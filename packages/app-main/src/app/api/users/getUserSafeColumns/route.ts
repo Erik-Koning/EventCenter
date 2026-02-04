@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -12,9 +14,9 @@ export async function GET() {
   const { user: authUser } = authResult;
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: authUser.id },
-      select: {
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, authUser.id),
+      columns: {
         id: true,
         name: true,
         email: true,

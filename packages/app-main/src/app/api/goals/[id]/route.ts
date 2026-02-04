@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, desc, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { goals, expertReviews, goalUpdates } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, commonErrors } from "@/lib/api-error";
@@ -26,17 +28,17 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
-    const goal = await prisma.goal.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
-      include: {
+    const goal = await db.query.goals.findFirst({
+      where: and(
+        eq(goals.id, id),
+        eq(goals.userId, user.id)
+      ),
+      with: {
         expertReviews: {
-          orderBy: { createdAt: "desc" },
+          orderBy: [desc(expertReviews.createdAt)],
         },
         goalUpdates: {
-          orderBy: { createdAt: "desc" },
+          orderBy: [desc(goalUpdates.createdAt)],
         },
         progressEstimates: true,
       },
@@ -66,33 +68,61 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const validated = updateGoalSchema.parse(body);
 
     // Verify ownership
-    const existingGoal = await prisma.goal.findFirst({
-      where: { id, userId: user.id },
+    const existingGoal = await db.query.goals.findFirst({
+      where: and(
+        eq(goals.id, id),
+        eq(goals.userId, user.id)
+      ),
     });
 
     if (!existingGoal) {
       return commonErrors.notFound("Goal");
     }
 
-    const goal = await prisma.goal.update({
-      where: { id },
-      data: {
-        ...(validated.title && { title: validated.title }),
-        ...(validated.description && { description: validated.description }),
-        ...(validated.targetDate !== undefined && { targetDate: validated.targetDate }),
-        ...(validated.status && { status: validated.status }),
-      },
-      include: {
+    // Build update data
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date(),
+    };
+
+    if (validated.title) {
+      updateData.title = validated.title;
+    }
+    if (validated.description) {
+      updateData.description = validated.description;
+    }
+    if (validated.targetDate !== undefined) {
+      updateData.targetDate = validated.targetDate;
+    }
+    if (validated.status) {
+      updateData.status = validated.status;
+    }
+
+    const [goal] = await db
+      .update(goals)
+      .set(updateData)
+      .where(eq(goals.id, id))
+      .returning();
+
+    // Fetch with relations
+    const goalWithRelations = await db.query.goals.findFirst({
+      where: eq(goals.id, id),
+      with: {
         expertReviews: true,
-        _count: {
-          select: {
-            goalUpdates: true,
-          },
-        },
       },
     });
 
-    return NextResponse.json(goal);
+    // Get counts
+    const updateCount = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(goalUpdates)
+      .where(eq(goalUpdates.goalId, id));
+
+    return NextResponse.json({
+      ...goalWithRelations,
+      _count: {
+        goalUpdates: Number(updateCount[0]?.count ?? 0),
+      },
+    });
   } catch (error) {
     return handleApiError(error, "goals:PATCH");
   }
@@ -110,17 +140,20 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const { id } = await params;
 
     // Verify ownership
-    const existingGoal = await prisma.goal.findFirst({
-      where: { id, userId: user.id },
+    const existingGoal = await db.query.goals.findFirst({
+      where: and(
+        eq(goals.id, id),
+        eq(goals.userId, user.id)
+      ),
     });
 
     if (!existingGoal) {
       return commonErrors.notFound("Goal");
     }
 
-    await prisma.goal.delete({
-      where: { id },
-    });
+    await db
+      .delete(goals)
+      .where(eq(goals.id, id));
 
     return NextResponse.json({ success: true });
   } catch (error) {

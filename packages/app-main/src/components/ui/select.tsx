@@ -51,7 +51,7 @@ function SelectTrigger({
 }
 
 function SelectContent({
-  className,
+  className = "backdrop-blur-[2.5px] bg-white/80",
   children,
   position = "popper",
   ...props

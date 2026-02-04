@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, desc } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users, userGoalSets, dailyUpdates, userAchievements } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -16,9 +18,9 @@ export async function GET(request: Request) {
     const format = searchParams.get("format") || "json";
 
     // Get all user data
-    const userData = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
+    const userData = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
+      columns: {
         id: true,
         name: true,
         email: true,
@@ -31,30 +33,30 @@ export async function GET(request: Request) {
       },
     });
 
-    const goalSets = await prisma.userGoalSet.findMany({
-      where: { userId: user.id },
-      include: {
+    const goalSets = await db.query.userGoalSets.findMany({
+      where: eq(userGoalSets.userId, user.id),
+      with: {
         goals: {
-          include: {
+          with: {
             progressEstimates: true,
             expertReviews: true,
           },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [desc(userGoalSets.createdAt)],
     });
 
-    const dailyUpdates = await prisma.dailyUpdate.findMany({
-      where: { userId: user.id },
-      include: {
+    const dailyUpdatesData = await db.query.dailyUpdates.findMany({
+      where: eq(dailyUpdates.userId, user.id),
+      with: {
         extractedActivities: true,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [desc(dailyUpdates.createdAt)],
     });
 
-    const achievements = await prisma.userAchievement.findMany({
-      where: { userId: user.id },
-      include: {
+    const achievements = await db.query.userAchievements.findMany({
+      where: eq(userAchievements.userId, user.id),
+      with: {
         achievement: true,
       },
     });
@@ -63,13 +65,13 @@ export async function GET(request: Request) {
       exportedAt: new Date().toISOString(),
       user: userData,
       goalSets,
-      dailyUpdates,
+      dailyUpdates: dailyUpdatesData,
       achievements,
       summary: {
         totalGoalSets: goalSets.length,
         totalGoals: goalSets.reduce((acc, gs) => acc + gs.goals.length, 0),
-        totalUpdates: dailyUpdates.length,
-        totalActivities: dailyUpdates.reduce(
+        totalUpdates: dailyUpdatesData.length,
+        totalActivities: dailyUpdatesData.reduce(
           (acc, u) => acc + u.extractedActivities.length,
           0
         ),
@@ -97,7 +99,7 @@ export async function GET(request: Request) {
             (goal.goalOrder ?? 0).toString(),
             `"${(goal.goalText ?? goal.description ?? "").replace(/"/g, '""')}"`,
             goal.validationStatus,
-            goalSet.startDate.toISOString().split("T")[0],
+            goalSet.startDate,
             goalSet.createdAt.toISOString(),
           ]);
         }
@@ -108,7 +110,7 @@ export async function GET(request: Request) {
       return new NextResponse(csv, {
         headers: {
           "Content-Type": "text/csv",
-          "Content-Disposition": `attachment; filename="chat-assistant-export-${
+          "Content-Disposition": `attachment; filename="achievely-export-${
             new Date().toISOString().split("T")[0]
           }.csv"`,
         },

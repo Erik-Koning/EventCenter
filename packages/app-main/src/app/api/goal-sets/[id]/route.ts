@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, desc } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { userGoalSets, goals, dailyUpdates } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, apiError, ErrorCode } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -43,23 +46,23 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
-    const goalSet = await prisma.userGoalSet.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
-      include: {
+    const goalSet = await db.query.userGoalSets.findFirst({
+      where: and(
+        eq(userGoalSets.id, id),
+        eq(userGoalSets.userId, user.id)
+      ),
+      with: {
         goals: {
-          orderBy: { goalOrder: "asc" },
-          include: {
+          orderBy: [goals.goalOrder],
+          with: {
             progressEstimates: true,
             expertReviews: true,
             expertSelections: true,
           },
         },
         dailyUpdates: {
-          orderBy: { createdAt: "desc" },
-          take: 10,
+          orderBy: [desc(dailyUpdates.createdAt)],
+          limit: 10,
         },
       },
     });
@@ -86,11 +89,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const { id } = await params;
 
     // Check ownership and editable status
-    const existingGoalSet = await prisma.userGoalSet.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
+    const existingGoalSet = await db.query.userGoalSets.findFirst({
+      where: and(
+        eq(userGoalSets.id, id),
+        eq(userGoalSets.userId, user.id)
+      ),
     });
 
     if (!existingGoalSet) {
@@ -98,54 +101,64 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Check if still in editable window
-    if (
-      existingGoalSet.editableUntil &&
-      new Date() > existingGoalSet.editableUntil
-    ) {
-      return apiError(
-        "Goal set is no longer editable",
-        ErrorCode.FORBIDDEN,
-        403,
-        { editableUntil: existingGoalSet.editableUntil }
-      );
+    if (existingGoalSet.editableUntil) {
+      const editableUntilDate = new Date(existingGoalSet.editableUntil);
+      if (new Date() > editableUntilDate) {
+        return apiError(
+          "Goal set is no longer editable",
+          ErrorCode.FORBIDDEN,
+          403,
+          { editableUntil: existingGoalSet.editableUntil }
+        );
+      }
     }
 
     const body = await request.json();
     const validated = updateGoalSetSchema.parse(body);
 
-    // Update goals if provided
-    if (validated.goals) {
-      // Delete existing goals and recreate
-      await prisma.goal.deleteMany({
-        where: { userGoalSetId: id },
-      });
+    // Update in a transaction
+    await db.transaction(async (tx) => {
+      // Update goals if provided
+      if (validated.goals) {
+        // Delete existing goals
+        await tx
+          .delete(goals)
+          .where(eq(goals.userGoalSetId, id));
 
-      await prisma.goal.createMany({
-        data: validated.goals.map((goal) => ({
-          userGoalSetId: id,
-          title: goal.goalText.substring(0, 255), // Use goalText as title
-          description: goal.goalText, // Use goalText as description
-          goalText: goal.goalText,
-          goalOrder: goal.goalOrder,
-          validationStatus: "pending",
-        })),
-      });
-    }
+        // Create new goals
+        for (const goal of validated.goals) {
+          await tx
+            .insert(goals)
+            .values({
+              id: createId(),
+              userGoalSetId: id,
+              title: goal.goalText.substring(0, 255),
+              description: goal.goalText,
+              goalText: goal.goalText,
+              goalOrder: goal.goalOrder,
+              validationStatus: "pending",
+            });
+        }
+      }
 
-    // Update status if provided
-    if (validated.status) {
-      await prisma.userGoalSet.update({
-        where: { id },
-        data: { status: validated.status },
-      });
-    }
+      // Update status if provided
+      if (validated.status) {
+        await tx
+          .update(userGoalSets)
+          .set({
+            status: validated.status,
+            updatedAt: new Date(),
+          })
+          .where(eq(userGoalSets.id, id));
+      }
+    });
 
     // Fetch updated goal set
-    const updatedGoalSet = await prisma.userGoalSet.findUnique({
-      where: { id },
-      include: {
+    const updatedGoalSet = await db.query.userGoalSets.findFirst({
+      where: eq(userGoalSets.id, id),
+      with: {
         goals: {
-          orderBy: { goalOrder: "asc" },
+          orderBy: [goals.goalOrder],
         },
       },
     });
@@ -167,11 +180,11 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
-    const goalSet = await prisma.userGoalSet.findFirst({
-      where: {
-        id,
-        userId: user.id,
-      },
+    const goalSet = await db.query.userGoalSets.findFirst({
+      where: and(
+        eq(userGoalSets.id, id),
+        eq(userGoalSets.userId, user.id)
+      ),
     });
 
     if (!goalSet) {
@@ -188,9 +201,9 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       );
     }
 
-    await prisma.userGoalSet.delete({
-      where: { id },
-    });
+    await db
+      .delete(userGoalSets)
+      .where(eq(userGoalSets.id, id));
 
     return NextResponse.json({ success: true });
   } catch (error) {

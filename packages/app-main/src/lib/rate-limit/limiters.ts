@@ -18,6 +18,12 @@ export const RATE_LIMIT_TIERS: Record<RateLimitTierId, RateLimitTier> = {
     windowSeconds: 3600, // 1 hour
     description: "Standard LLM operations (validation, extraction)",
   },
+  auth: {
+    id: "auth",
+    limit: 10,
+    windowSeconds: 60, // 1 minute
+    description: "Authentication endpoints (login, signup, etc.)",
+  },
 };
 
 // Cache for limiter instances

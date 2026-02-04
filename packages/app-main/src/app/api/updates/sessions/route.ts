@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, and, desc, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { chatSessions, chatMessages } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -23,17 +25,17 @@ export async function GET(request: Request) {
 
     // If sessionId is provided, fetch single session
     if (sessionId) {
-      const session = await prisma.chatSession.findFirst({
-        where: {
-          sessionId,
-          userId: user.id,
-        },
-        include: {
+      const session = await db.query.chatSessions.findFirst({
+        where: and(
+          eq(chatSessions.sessionId, sessionId),
+          eq(chatSessions.userId, user.id)
+        ),
+        with: {
           messages: {
-            orderBy: { createdAt: "asc" },
+            orderBy: [chatMessages.createdAt],
           },
           dailyUpdate: {
-            include: {
+            with: {
               extractedActivities: true,
             },
           },
@@ -49,7 +51,7 @@ export async function GET(request: Request) {
           id: session.id,
           sessionId: session.sessionId,
           updatePeriod: session.updatePeriod,
-          periodDate: session.periodDate.toISOString().split("T")[0],
+          periodDate: session.periodDate,
           startedAt: session.startedAt.toISOString(),
           endedAt: session.endedAt?.toISOString() || null,
           status: session.status,
@@ -65,7 +67,7 @@ export async function GET(request: Request) {
               activityType: activity.activityType,
               quantity: Number(activity.quantity),
               summary: activity.summary,
-              activityDate: activity.activityDate.toISOString(),
+              activityDate: activity.activityDate,
             })) || [],
         },
       });
@@ -75,37 +77,43 @@ export async function GET(request: Request) {
     const offset = parseInt(searchParams.get("offset") || "0");
     const status = searchParams.get("status");
 
-    const whereClause = {
-      userId: user.id,
-      ...(status ? { status } : {}),
-    };
+    // Build conditions
+    const conditions = [eq(chatSessions.userId, user.id)];
+    if (status) {
+      conditions.push(eq(chatSessions.status, status));
+    }
 
-    const [sessions, total] = await Promise.all([
-      prisma.chatSession.findMany({
-        where: whereClause,
-        include: {
+    const [sessions, totalResult] = await Promise.all([
+      db.query.chatSessions.findMany({
+        where: and(...conditions),
+        with: {
           messages: {
-            orderBy: { createdAt: "asc" },
+            orderBy: [chatMessages.createdAt],
           },
           dailyUpdate: {
-            include: {
+            with: {
               extractedActivities: true,
             },
           },
         },
-        orderBy: { startedAt: "desc" },
-        take: limit,
-        skip: offset,
+        orderBy: [desc(chatSessions.startedAt)],
+        limit,
+        offset,
       }),
-      prisma.chatSession.count({ where: whereClause }),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(chatSessions)
+        .where(and(...conditions)),
     ]);
+
+    const total = Number(totalResult[0]?.count ?? 0);
 
     // Transform the data for the frontend
     const transformedSessions = sessions.map((session) => ({
       id: session.id,
       sessionId: session.sessionId,
       updatePeriod: session.updatePeriod,
-      periodDate: session.periodDate.toISOString(),
+      periodDate: session.periodDate,
       startedAt: session.startedAt.toISOString(),
       endedAt: session.endedAt?.toISOString() || null,
       status: session.status,
@@ -121,7 +129,7 @@ export async function GET(request: Request) {
           activityType: activity.activityType,
           quantity: Number(activity.quantity),
           summary: activity.summary,
-          activityDate: activity.activityDate.toISOString(),
+          activityDate: activity.activityDate,
         })) || [],
     }));
 

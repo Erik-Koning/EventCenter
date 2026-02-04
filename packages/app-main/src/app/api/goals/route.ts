@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { eq, desc, and } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { goals, expertReviews, goalUpdates } from "@/db/schema";
 import { z } from "zod";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 const createGoalSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(255),
@@ -24,28 +27,45 @@ export async function GET(request: Request) {
     const status = searchParams.get("status");
     const includeReviews = searchParams.get("includeReviews") === "true";
 
-    const goals = await prisma.goal.findMany({
-      where: {
-        userId: user.id,
-        ...(status && { status }),
-      },
-      include: {
-        expertReviews: includeReviews,
+    // Build query with Drizzle
+    const userGoals = await db.query.goals.findMany({
+      where: and(
+        eq(goals.userId, user.id),
+        status ? eq(goals.status, status) : undefined
+      ),
+      with: {
+        ...(includeReviews && { expertReviews: true }),
         goalUpdates: {
-          orderBy: { createdAt: "desc" },
-          take: 5,
-        },
-        _count: {
-          select: {
-            expertReviews: true,
-            goalUpdates: true,
-          },
+          orderBy: [desc(goalUpdates.createdAt)],
+          limit: 5,
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [desc(goals.createdAt)],
     });
 
-    return NextResponse.json({ goals });
+    // Add counts
+    const goalsWithCounts = await Promise.all(
+      userGoals.map(async (goal) => {
+        const reviewCount = await db
+          .select({ count: expertReviews.id })
+          .from(expertReviews)
+          .where(eq(expertReviews.goalId, goal.id));
+        const updateCount = await db
+          .select({ count: goalUpdates.id })
+          .from(goalUpdates)
+          .where(eq(goalUpdates.goalId, goal.id));
+
+        return {
+          ...goal,
+          _count: {
+            expertReviews: reviewCount.length,
+            goalUpdates: updateCount.length,
+          },
+        };
+      })
+    );
+
+    return NextResponse.json({ goals: goalsWithCounts });
   } catch (error) {
     return handleApiError(error, "goals:GET");
   }
@@ -63,16 +83,18 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = createGoalSchema.parse(body);
 
-    const goal = await prisma.goal.create({
-      data: {
+    const [goal] = await db
+      .insert(goals)
+      .values({
+        id: createId(),
         userId: user.id,
         title: validated.title,
         description: validated.description,
         targetDate: validated.targetDate,
         status: validated.status,
         validationStatus: "pending",
-      },
-    });
+      })
+      .returning();
 
     return NextResponse.json(goal, { status: 201 });
   } catch (error) {

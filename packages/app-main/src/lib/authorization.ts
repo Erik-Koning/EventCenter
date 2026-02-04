@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { auth } from "./auth";
 import { headers } from "next/headers";
-import { prisma } from "./prisma";
+import { db } from "./db";
+import { users } from "@/db/schema";
 import {
   checkRateLimit,
   createRateLimitResponse,
@@ -42,6 +44,8 @@ export interface AuthenticatedUser {
   streakCurrent: number;
   streakLongest: number;
   totalPoints: number;
+  blocked: boolean;
+  lastTwoFactorAt: Date | null;
 }
 
 /**
@@ -112,6 +116,8 @@ export async function requireAuth(
       streakCurrent: 0,
       streakLongest: 0,
       totalPoints: 0,
+      blocked: false,
+      lastTwoFactorAt: null,
     };
 
     const mockRateLimitResult: RateLimitResult = {
@@ -155,6 +161,8 @@ export async function requireAuth(
               streakCurrent: 0,
               streakLongest: 0,
               totalPoints: 0,
+              blocked: false,
+              lastTwoFactorAt: null,
             },
             rateLimitResult,
           };
@@ -172,6 +180,8 @@ export async function requireAuth(
             streakCurrent: 0,
             streakLongest: 0,
             totalPoints: 0,
+            blocked: false,
+            lastTwoFactorAt: null,
           },
           rateLimitResult: {
             success: true,
@@ -192,10 +202,10 @@ export async function requireAuth(
       };
     }
 
-    // Get full user from database with role info
-    const dbUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
+    // Get full user from database with role info using Drizzle
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, session.user.id),
+      columns: {
         id: true,
         email: true,
         name: true,
@@ -205,6 +215,8 @@ export async function requireAuth(
         streakCurrent: true,
         streakLongest: true,
         totalPoints: true,
+        blocked: true,
+        lastTwoFactorAt: true,
       },
     });
 
@@ -214,6 +226,17 @@ export async function requireAuth(
         response: NextResponse.json(
           { message: "User not found", error: "NOT_FOUND" },
           { status: 404 }
+        ),
+      };
+    }
+
+    // Block suspended accounts
+    if (dbUser.blocked) {
+      return {
+        success: false,
+        response: NextResponse.json(
+          { message: "Account suspended", error: "FORBIDDEN" },
+          { status: 403 }
         ),
       };
     }
@@ -228,6 +251,8 @@ export async function requireAuth(
       streakCurrent: dbUser.streakCurrent,
       streakLongest: dbUser.streakLongest,
       totalPoints: dbUser.totalPoints,
+      blocked: dbUser.blocked,
+      lastTwoFactorAt: dbUser.lastTwoFactorAt,
     };
 
     // Check role permission
