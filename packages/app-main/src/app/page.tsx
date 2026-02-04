@@ -1,5 +1,6 @@
 import { auth } from "@/src/lib/auth"; // path to your Better Auth server instance
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 import Link from "next/link";
 import { Button } from "@/src/components/ui/button";
@@ -15,6 +16,10 @@ export default async function page() {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
+
+  if (session?.user) {
+    redirect("/home");
+  }
 
   return (
     <div className="flex min-h-screen flex-col">

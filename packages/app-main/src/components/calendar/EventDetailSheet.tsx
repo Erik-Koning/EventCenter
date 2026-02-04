@@ -100,7 +100,7 @@ export default function EventDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md overflow-y-auto">
+      <SheetContent className="sm:max-w-md overflow-y-auto px-4">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             {event.isPrivate && <Lock className="h-4 w-4 text-muted-foreground" />}

@@ -308,7 +308,7 @@ export function ChatSessionAccordion({
                               {config.label}
                             </Badge>
                             <span className="text-sm font-medium">
-                              x{activity.quantity}
+                              x{Math.round(Number(activity.quantity))}
                             </span>
                           </div>
                           <p className="text-sm text-muted-foreground">

@@ -103,7 +103,7 @@ export function ActivityTimeline({ activities, className }: ActivityTimelineProp
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{config.label}</span>
                       <span className="text-sm text-muted-foreground">
-                        x{activity.quantity}
+                        x{Math.round(Number(activity.quantity))}
                       </span>
                       <span className="text-xs text-muted-foreground capitalize">
                         ({activity.period})

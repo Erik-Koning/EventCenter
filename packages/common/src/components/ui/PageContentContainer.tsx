@@ -142,8 +142,8 @@ export const PageContentContainer = forwardRef<HTMLDivElement, PageContentContai
           className
         )}
         style={{
-          marginLeft: sideMenuMargin,
-          transition: sideMenuMargin ? "margin-left 300ms" : undefined,
+          paddingLeft: sideMenuMargin,
+          transition: sideMenuMargin ? "padding-left 300ms" : undefined,
           ...props.style,
         }}
         {...props}

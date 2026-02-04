@@ -417,7 +417,7 @@ export default function PersonalStatsPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{activity.summary}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(activity.activityDate).toLocaleDateString()} &middot; x{activity.quantity}
+                            {new Date(activity.activityDate).toLocaleDateString()} &middot; x{Math.round(Number(activity.quantity))}
                           </p>
                         </div>
                         <Badge variant="secondary" className={cn("text-xs", config?.color)}>

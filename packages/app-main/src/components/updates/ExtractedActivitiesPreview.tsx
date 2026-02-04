@@ -99,7 +99,7 @@ export function ExtractedActivitiesPreview({
   const summary = activities.reduce(
     (acc, activity) => {
       acc[activity.activityType] =
-        (acc[activity.activityType] || 0) + activity.quantity;
+        (acc[activity.activityType] || 0) + Math.round(Number(activity.quantity));
       return acc;
     },
     {} as Record<string, number>
@@ -160,7 +160,7 @@ export function ExtractedActivitiesPreview({
                       {config.label}
                     </span>
                     <Badge variant="outline" className="shrink-0">
-                      x{activity.quantity}
+                      x{Math.round(Number(activity.quantity))}
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
