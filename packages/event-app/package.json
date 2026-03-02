@@ -1,0 +1,42 @@
+{
+	"name": "event-app",
+	"version": "1.0.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev --turbopack --port 9001",
+		"build": "next build",
+		"start": "next start",
+		"lint": "next lint"
+	},
+	"dependencies": {
+		"@dnd-kit/core": "^6.3.1",
+		"@dnd-kit/sortable": "^10.0.0",
+		"@dnd-kit/modifiers": "^9.0.0",
+		"@dnd-kit/utilities": "^3.2.2",
+		"@radix-ui/react-dialog": "catalog:",
+		"@radix-ui/react-slot": "catalog:",
+		"@radix-ui/react-tabs": "catalog:",
+		"@radix-ui/react-tooltip": "catalog:",
+		"class-variance-authority": "catalog:",
+		"clsx": "catalog:",
+		"common": "workspace:*",
+		"date-fns": "^4.1.0",
+		"framer-motion": "catalog:",
+		"lucide-react": "catalog:",
+		"next": "catalog:",
+		"react": "catalog:",
+		"react-dom": "catalog:",
+		"sonner": "catalog:",
+		"tailwind-merge": "catalog:",
+		"vaul": "catalog:",
+		"zustand": "^4.3.7"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "catalog:",
+		"@types/node": "catalog:",
+		"@types/react": "catalog:",
+		"@types/react-dom": "catalog:",
+		"tailwindcss": "catalog:",
+		"typescript": "catalog:"
+	}
+}
