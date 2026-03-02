@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@common/components/ui/Tabs";
+import { cn } from "@common/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EventOverview } from "@/components/agenda/EventOverview";
 import { DayCalendar } from "@/components/agenda/DayCalendar";
@@ -13,6 +14,7 @@ import { EVENT_INFO } from "@/data/event";   // ^
 import type { Session } from "@/data/types"; // ^
 
 export default function AgendaPage() {
+  const [activeDay, setActiveDay] = useState<string>("day-1");
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -44,17 +46,27 @@ export default function AgendaPage() {
 
       <EventOverview />
 
-      <Tabs defaultValue="day-1">
-        <TabsList className="mb-6">
-          <TabsTrigger value="day-1">
-            {formatDayLabel(EVENT_INFO.dates.day1, 1)}
-          </TabsTrigger>
-          <TabsTrigger value="day-2">
-            {formatDayLabel(EVENT_INFO.dates.day2, 2)}
-          </TabsTrigger>
-          <TabsTrigger value="day-3">
-            {formatDayLabel(EVENT_INFO.dates.day3, 3)}
-          </TabsTrigger>
+      <Tabs defaultValue="day-1" onValueChange={setActiveDay}>
+        <TabsList className="mb-6 flex gap-2 bg-transparent p-0">
+          {([
+            { value: "day-1", date: EVENT_INFO.dates.day1, num: 1 },
+            { value: "day-2", date: EVENT_INFO.dates.day2, num: 2 },
+            { value: "day-3", date: EVENT_INFO.dates.day3, num: 3 },
+          ] as const).map((day) => (
+            <div
+              key={day.value}
+              className={cn(
+                "rounded-xl px-1 py-1 transition-colors",
+                activeDay === day.value
+                  ? "bg-primary/15"
+                  : "bg-primary/[0.06]"
+              )}
+            >
+              <TabsTrigger value={day.value}>
+                {formatDayLabel(day.date, day.num)}
+              </TabsTrigger>
+            </div>
+          ))}
         </TabsList>
 
         <TabsContent value="day-1">

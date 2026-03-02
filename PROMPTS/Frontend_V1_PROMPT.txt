@@ -1,0 +1,28 @@
+I want to make a new app in this monorepo structure for an offsite exec event. We'll use next.js.
+Just build the frontend do not worry about functionality or the backend.
+Here are the specifications for the frontend:
+## Pages
+
+### Agenda
+- Brief Event Overview? Stylized paragraph section with some key speakers and purpose
+- 3 Day event so 3 separate calendars with dates
+- Calendar of the sessions and their start time, location, who is speaking, title, etc
+- Interactive feature where clicking a session on the calendar pulls up more details
+
+### Speakers
+-Carousel of speakers
+-Title
+-Image
+
+-Bio
+
+### Sessions
+- List of sessions where speakers can add their sessions and details
+- Attendees can upvote sessions
+
+### Attendees
+- List of attendees
+
+### Personal Calendar
+- Every attendee gets a blank calendar upon registration where they can select from the sessions to plan their day
+- this page should display a fully editable calendar tied to the authed user’s profile

@@ -1,12 +1,11 @@
 "use client";
 
-import { useDraggable } from "@dnd-kit/core";
 import { cn } from "@common/lib/utils";
 import type { Session } from "@/data/types";
 import { formatTimeRange } from "@/lib/time";
-import { GripVertical, Check } from "lucide-react";
+import { Check } from "lucide-react";
 
-interface DraggableSessionProps {
+interface SessionPoolItemProps {
   session: Session;
   isSelected: boolean;
   onAdd: () => void;
@@ -16,40 +15,16 @@ export function DraggableSession({
   session,
   isSelected,
   onAdd,
-}: DraggableSessionProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({
-      id: session.id,
-      data: { session },
-      disabled: isSelected,
-    });
-
-  const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
-    : undefined;
-
+}: SessionPoolItemProps) {
   return (
     <div
-      ref={setNodeRef}
-      style={style}
       className={cn(
         "flex items-center gap-2 rounded-lg border border-border bg-white p-2.5 text-xs transition-all",
-        isDragging && "z-50 shadow-lg opacity-90",
         isSelected
           ? "border-primary/20 bg-primary/[0.04] opacity-60"
           : "hover:shadow-sm"
       )}
     >
-      {!isSelected && (
-        <button
-          {...listeners}
-          {...attributes}
-          className="cursor-grab touch-none text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-      )}
-
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium text-foreground">{session.title}</p>
         <p className="text-[10px] text-muted-foreground">

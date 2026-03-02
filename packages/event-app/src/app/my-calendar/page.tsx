@@ -1,33 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { format } from "date-fns";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@common/components/ui/Tabs";
+import { cn } from "@common/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PersonalCalendar } from "@/components/my-calendar/PersonalCalendar";
 import { SessionPool } from "@/components/my-calendar/SessionPool";
-import { useCalendarStore } from "@/lib/stores/calendarStore";
 import { EVENT_INFO } from "@/data/event";
 
 export default function MyCalendarPage() {
   const [activeDay, setActiveDay] = useState<1 | 2 | 3>(1);
-  const addSession = useCalendarStore((s) => s.addSession);
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id) {
-      addSession(String(active.id));
-    }
-  };
 
   const formatDayLabel = (dateStr: string, dayNum: number) => {
     const date = new Date(dateStr + "T12:00:00");
-    return `Day ${dayNum} · ${format(date, "EEE, MMM d")}`;
+    return `Day ${dayNum} · ${format(date, "EEEE, MMM d")}`;
   };
 
   return (
-    <DndContext onDragEnd={handleDragEnd}>
+    <>
       <PageHeader
         title="My Calendar"
         subtitle="Build your personal schedule by adding sessions"
@@ -37,16 +28,26 @@ export default function MyCalendarPage() {
         defaultValue="day-1"
         onValueChange={(v) => setActiveDay(Number(v.split("-")[1]) as 1 | 2 | 3)}
       >
-        <TabsList className="mb-6">
-          <TabsTrigger value="day-1">
-            {formatDayLabel(EVENT_INFO.dates.day1, 1)}
-          </TabsTrigger>
-          <TabsTrigger value="day-2">
-            {formatDayLabel(EVENT_INFO.dates.day2, 2)}
-          </TabsTrigger>
-          <TabsTrigger value="day-3">
-            {formatDayLabel(EVENT_INFO.dates.day3, 3)}
-          </TabsTrigger>
+        <TabsList className="mb-6 flex gap-2 bg-transparent p-0">
+          {([
+            { value: "day-1", date: EVENT_INFO.dates.day1, num: 1 },
+            { value: "day-2", date: EVENT_INFO.dates.day2, num: 2 },
+            { value: "day-3", date: EVENT_INFO.dates.day3, num: 3 },
+          ] as const).map((day) => (
+            <div
+              key={day.value}
+              className={cn(
+                "rounded-xl px-1 py-1 transition-colors",
+                activeDay === day.num
+                  ? "bg-primary/15"
+                  : "bg-primary/[0.06]"
+              )}
+            >
+              <TabsTrigger value={day.value}>
+                {formatDayLabel(day.date, day.num)}
+              </TabsTrigger>
+            </div>
+          ))}
         </TabsList>
 
         {([1, 2, 3] as const).map((day) => (
@@ -58,6 +59,6 @@ export default function MyCalendarPage() {
           </TabsContent>
         ))}
       </Tabs>
-    </DndContext>
+    </>
   );
 }
