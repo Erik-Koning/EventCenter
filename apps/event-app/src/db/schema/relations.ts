@@ -1,5 +1,5 @@
 /**
- * Drizzle ORM Relations — Auth + Networking for event-app
+ * Drizzle ORM Relations — Auth + Networking + Event for event-app
  */
 import { relations } from "drizzle-orm";
 
@@ -18,6 +18,22 @@ import {
   networkingMessages,
   networkingMindMapNodes,
 } from "./networking";
+
+import {
+  eventSessions,
+  sessionSpeakers,
+  sessionUpvotes,
+  sessionComments,
+} from "./sessions";
+
+import {
+  speakers,
+} from "./speakers";
+
+import {
+  attendees,
+} from "./attendees";
+
 
 // ============================================
 // USER RELATIONS
@@ -46,6 +62,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   networkingMemberships: many(networkingGroupMembers),
   networkingMessages: many(networkingMessages),
   networkingMindMapNodes: many(networkingMindMapNodes),
+
+  // Event
+  sessionUpvotes: many(sessionUpvotes),
+  sessionComments: many(sessionComments),
 }));
 
 // ============================================
@@ -134,6 +154,90 @@ export const networkingMindMapNodesRelations = relations(networkingMindMapNodes,
   }),
   createdBy: one(users, {
     fields: [networkingMindMapNodes.createdByUserId],
+    references: [users.id],
+  }),
+}));
+
+//===================================================================
+// EVENT SESSION RELATIONS
+//===================================================================
+
+export const eventSessionsRelations = relations(eventSessions, ({ many }) => ({
+  sessionSpeakers: many(sessionSpeakers),
+  upvotes: many(sessionUpvotes),
+  comments: many(sessionComments),
+}));
+
+//===================================================================
+// SESSION ↔ SPEAKER JOIN TABLE RELATIONS
+//===================================================================
+
+export const sessionSpeakersRelations = relations(sessionSpeakers, ({ one }) => ({
+  session: one(eventSessions, {
+    fields: [sessionSpeakers.sessionId],
+    references: [eventSessions.id],
+  }),
+  speaker: one(speakers, {
+    fields: [sessionSpeakers.speakerId],
+    references: [speakers.id],
+  }),
+}));
+
+//===================================================================
+// SESSION UPVOTE RELATIONS
+//===================================================================
+
+export const sessionUpvotesRelations = relations(
+  sessionUpvotes,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [sessionUpvotes.userId],
+      references: [users.id],
+    }),
+    session: one(eventSessions, {
+      fields: [sessionUpvotes.sessionId],
+      references: [eventSessions.id],
+    }),
+  })
+);
+
+//===================================================================
+// SESSION COMMENT RELATIONS
+//===================================================================
+
+export const sessionCommentsRelations = relations(
+  sessionComments,
+  ({ one }) => ({
+    session: one(eventSessions, {
+      fields: [sessionComments.sessionId],
+      references: [eventSessions.id],
+    }),
+    user: one(users, {
+      fields: [sessionComments.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+//====================================================================
+// SPEAKER RELATIONS
+//====================================================================
+
+export const speakersRelations = relations(speakers, ({ one, many }) => ({
+  user: one(users, {
+    fields: [speakers.userId],
+    references: [users.id],
+  }),
+  sessionSpeakers: many(sessionSpeakers),
+}));
+
+//====================================================================
+// ATTENDEE RELATIONS
+//====================================================================
+
+export const attendeesRelations = relations(attendees, ({ one }) => ({
+  user: one(users, {
+    fields: [attendees.userId],
     references: [users.id],
   }),
 }));

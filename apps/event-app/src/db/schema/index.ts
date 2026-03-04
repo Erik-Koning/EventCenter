@@ -21,5 +21,20 @@ export {
   networkingMindMapNodes,
 } from "./networking";
 
+// Speakers
+export { speakers } from "./speakers";
+
+// Sessions
+export {
+  trackEnum,
+  eventSessions,
+  sessionSpeakers,
+  sessionUpvotes,
+  sessionComments,
+} from "./sessions";
+
+// Attendees
+export { attendees } from "./attendees";
+
 // All relations
 export * from "./relations";
