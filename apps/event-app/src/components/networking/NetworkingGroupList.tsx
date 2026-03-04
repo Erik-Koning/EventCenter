@@ -3,11 +3,14 @@
 import { useNetworkingStore } from "@/lib/stores/networkingStore";
 import { NetworkingGroupCard } from "./NetworkingGroupCard";
 
-export function NetworkingGroupList() {
+interface NetworkingGroupListProps {
+  onGroupClick?: (groupId: string) => void;
+}
+
+export function NetworkingGroupList({ onGroupClick }: NetworkingGroupListProps) {
   const groups = useNetworkingStore((s) => s.groups);
   const groupsLoading = useNetworkingStore((s) => s.groupsLoading);
-  const selectedGroupId = useNetworkingStore((s) => s.selectedGroupId);
-  const selectGroup = useNetworkingStore((s) => s.selectGroup);
+  const previewGroupId = useNetworkingStore((s) => s.previewGroupId);
 
   if (groupsLoading && groups.length === 0) {
     return (
@@ -29,13 +32,13 @@ export function NetworkingGroupList() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-2 overflow-y-auto pr-1">
+    <div className="flex h-full flex-wrap content-start gap-2 overflow-y-auto pr-1">
       {groups.map((group) => (
         <NetworkingGroupCard
           key={group.id}
           group={group}
-          isSelected={group.id === selectedGroupId}
-          onSelect={() => selectGroup(group.id)}
+          isSelected={group.id === previewGroupId}
+          onSelect={() => onGroupClick?.(group.id)}
         />
       ))}
     </div>

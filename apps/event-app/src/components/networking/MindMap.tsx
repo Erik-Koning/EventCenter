@@ -3,8 +3,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useNetworkingStore, type MindMapNode } from "@/lib/stores/networkingStore";
-import { MindMapNodeInput } from "./MindMapNodeInput";
-import { cn } from "@/lib/utils";
 
 interface DragState {
   nodeId: string;
@@ -23,9 +21,11 @@ export function MindMap() {
   const removeMindMapNode = useNetworkingStore((s) => s.removeMindMapNode);
 
   const [creatingFor, setCreatingFor] = useState<string | null>(null); // parentId or "root"
+  const [inlineValue, setInlineValue] = useState("");
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const inlineInputRef = useRef<HTMLInputElement>(null);
 
   // SVG viewBox pan
   const [viewBox, setViewBox] = useState({ x: -400, y: -300, w: 800, h: 600 });
@@ -50,6 +50,17 @@ export function MindMap() {
       h: Math.max(maxY - minY, 300),
     });
   }, [nodes]);
+
+  // Focus inline input when creatingFor changes
+  useEffect(() => {
+    if (creatingFor) {
+      setInlineValue("");
+      // Small delay to let foreignObject render
+      requestAnimationFrame(() => {
+        inlineInputRef.current?.focus();
+      });
+    }
+  }, [creatingFor]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, node: MindMapNode) => {
@@ -91,7 +102,6 @@ export function MindMap() {
     }
     const node = nodes.find((n) => n.id === dragState.nodeId);
     if (node) {
-      // Persist position
       await fetch(
         `/api/networking/groups/${selectedGroupId}/mindmap/${dragState.nodeId}`,
         {
@@ -144,6 +154,23 @@ export function MindMap() {
     }
   }
 
+  // Compute where the inline "new node" circle should appear
+  function getNewNodePosition(): { x: number; y: number } {
+    if (creatingFor === "root") {
+      return { x: 0, y: 0 };
+    }
+    const parent = nodes.find((n) => n.id === creatingFor);
+    if (!parent) return { x: 0, y: 0 };
+    // Offset below-right of parent
+    const childCount = nodes.filter((n) => n.parentId === parent.id).length;
+    const angle = -Math.PI / 4 + (childCount * Math.PI) / 6;
+    const dist = 120;
+    return {
+      x: parent.positionX + Math.cos(angle) * dist,
+      y: parent.positionY + Math.sin(angle) * dist,
+    };
+  }
+
   if (!isMember) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -153,6 +180,9 @@ export function MindMap() {
       </div>
     );
   }
+
+  const newNodePos = creatingFor ? getNewNodePosition() : null;
+  const newNodeRadius = creatingFor === "root" ? 50 : 40;
 
   return (
     <div className="relative flex h-full flex-col">
@@ -166,16 +196,6 @@ export function MindMap() {
           Add Root
         </button>
       </div>
-
-      {/* Inline input for creating root node */}
-      {creatingFor === "root" && (
-        <div className="mb-2">
-          <MindMapNodeInput
-            onSubmit={(label) => handleCreateNode(label, null)}
-            onCancel={() => setCreatingFor(null)}
-          />
-        </div>
-      )}
 
       {/* SVG Canvas */}
       <div className="flex-1 overflow-hidden rounded-lg border border-border/50 bg-secondary/30">
@@ -213,6 +233,20 @@ export function MindMap() {
                 );
               })}
 
+            {/* Edge from parent to new node being created */}
+            {creatingFor && creatingFor !== "root" && newNodePos && (
+              <line
+                x1={nodes.find((n) => n.id === creatingFor)?.positionX ?? 0}
+                y1={nodes.find((n) => n.id === creatingFor)?.positionY ?? 0}
+                x2={newNodePos.x}
+                y2={newNodePos.y}
+                stroke="var(--primary)"
+                strokeWidth="1.5"
+                strokeDasharray="6 4"
+                opacity={0.5}
+              />
+            )}
+
             {/* Nodes */}
             {nodes.map((node) => (
               <g
@@ -224,7 +258,7 @@ export function MindMap() {
                 <circle
                   cx={node.positionX}
                   cy={node.positionY}
-                  r={node.parentId ? 35 : 45}
+                  r={node.parentId ? 40 : 50}
                   fill={
                     selectedNode === node.id
                       ? "rgba(220, 38, 38, 0.12)"
@@ -247,15 +281,15 @@ export function MindMap() {
                   dominantBaseline="central"
                   className="select-none pointer-events-none"
                   fill="var(--foreground)"
-                  fontSize={node.parentId ? 10 : 12}
+                  fontSize={node.parentId ? 14 : 16}
                   fontWeight={node.parentId ? 400 : 600}
                 >
-                  {node.label.length > 20
-                    ? node.label.slice(0, 18) + "..."
+                  {node.label.length > 12
+                    ? node.label.slice(0, 10) + "..."
                     : node.label}
                 </text>
 
-                {/* Add child button */}
+                {/* Add child button — larger */}
                 <g
                   onClick={(e) => {
                     e.stopPropagation();
@@ -265,21 +299,21 @@ export function MindMap() {
                   className="cursor-pointer"
                 >
                   <circle
-                    cx={node.positionX + (node.parentId ? 30 : 40)}
-                    cy={node.positionY - (node.parentId ? 25 : 35)}
-                    r={10}
+                    cx={node.positionX + (node.parentId ? 36 : 46)}
+                    cy={node.positionY - (node.parentId ? 30 : 40)}
+                    r={16}
                     fill="white"
                     stroke="var(--primary)"
-                    strokeWidth="1"
-                    opacity={0.7}
+                    strokeWidth="1.5"
+                    opacity={0.85}
                   />
                   <text
-                    x={node.positionX + (node.parentId ? 30 : 40)}
-                    y={node.positionY - (node.parentId ? 25 : 35)}
+                    x={node.positionX + (node.parentId ? 36 : 46)}
+                    y={node.positionY - (node.parentId ? 30 : 40)}
                     textAnchor="middle"
                     dominantBaseline="central"
                     fill="var(--primary)"
-                    fontSize="14"
+                    fontSize="20"
                     fontWeight="bold"
                     className="pointer-events-none select-none"
                   >
@@ -288,19 +322,62 @@ export function MindMap() {
                 </g>
               </g>
             ))}
+
+            {/* Inline input circle for new node */}
+            {creatingFor && newNodePos && (
+              <g>
+                <circle
+                  cx={newNodePos.x}
+                  cy={newNodePos.y}
+                  r={newNodeRadius}
+                  fill="white"
+                  stroke="var(--primary)"
+                  strokeWidth="2"
+                  strokeDasharray="6 4"
+                />
+                <foreignObject
+                  x={newNodePos.x - newNodeRadius + 4}
+                  y={newNodePos.y - 12}
+                  width={(newNodeRadius - 4) * 2}
+                  height={24}
+                >
+                  <input
+                    ref={inlineInputRef}
+                    value={inlineValue}
+                    onChange={(e) => {
+                      const words = e.target.value.trim().split(/\s+/).filter(Boolean).length;
+                      if (words <= 12) setInlineValue(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && inlineValue.trim()) {
+                        handleCreateNode(
+                          inlineValue.trim(),
+                          creatingFor === "root" ? null : creatingFor
+                        );
+                      } else if (e.key === "Escape") {
+                        setCreatingFor(null);
+                      }
+                    }}
+                    onBlur={() => setCreatingFor(null)}
+                    placeholder="Label..."
+                    maxLength={200}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      border: "none",
+                      outline: "none",
+                      background: "transparent",
+                      textAlign: "center",
+                      fontSize: "13px",
+                      color: "var(--foreground)",
+                    }}
+                  />
+                </foreignObject>
+              </g>
+            )}
           </svg>
         )}
       </div>
-
-      {/* Inline input for creating child node */}
-      {creatingFor && creatingFor !== "root" && (
-        <div className="absolute bottom-2 left-2 right-2 z-10">
-          <MindMapNodeInput
-            onSubmit={(label) => handleCreateNode(label, creatingFor)}
-            onCancel={() => setCreatingFor(null)}
-          />
-        </div>
-      )}
 
       {/* Delete button for selected node */}
       {selectedNode && !creatingFor && (

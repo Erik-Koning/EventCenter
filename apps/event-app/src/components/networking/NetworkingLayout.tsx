@@ -1,90 +1,65 @@
 "use client";
 
-import { useEffect } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { useNetworkingStore } from "@/lib/stores/networkingStore";
 import { useNetworkingPolling } from "@/hooks/useNetworkingPolling";
 import { NetworkingGroupList } from "./NetworkingGroupList";
-import { NetworkingChat } from "./NetworkingChat";
-import { AISummaryPanel } from "./AISummaryPanel";
-import { MindMap } from "./MindMap";
+import { GroupPreviewPanel } from "./GroupPreviewPanel";
 import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 export function NetworkingLayout() {
-  const selectedGroupId = useNetworkingStore((s) => s.selectedGroupId);
-  const selectGroup = useNetworkingStore((s) => s.selectGroup);
-  const isMember = useNetworkingStore((s) => s.isMember);
+  const router = useRouter();
+  const previewGroupId = useNetworkingStore((s) => s.previewGroupId);
+  const setPreviewGroupId = useNetworkingStore((s) => s.setPreviewGroupId);
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   useNetworkingPolling();
 
-  // Fetch group detail + membership when selected
-  useEffect(() => {
-    if (!selectedGroupId) return;
-    fetch(`/api/networking/groups/${selectedGroupId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        useNetworkingStore.getState().setIsMember(data.isMember ?? false);
-      })
-      .catch(() => {});
-  }, [selectedGroupId]);
+  const handleGroupClick = useCallback(
+    (groupId: string) => {
+      if (!isDesktop) {
+        router.push(`/networking/${groupId}`);
+        return;
+      }
+      setPreviewGroupId(previewGroupId === groupId ? null : groupId);
+    },
+    [isDesktop, router, setPreviewGroupId, previewGroupId]
+  );
 
-  const showGroupDetail = !!selectedGroupId;
+  const showPanel = !!previewGroupId;
 
   return (
     <div className="flex h-[calc(100vh-12rem)] gap-4">
-      {/* Group List - always visible on lg+, conditionally on mobile */}
+      {/* Group list — squishes when panel opens */}
       <div
         className={cn(
-          "w-full flex-shrink-0 lg:w-[280px]",
-          showGroupDetail && "hidden lg:block"
+          "min-w-0 overflow-y-auto transition-all duration-300",
+          showPanel ? "hidden lg:block lg:flex-1" : "w-full"
         )}
       >
-        <NetworkingGroupList />
+        <NetworkingGroupList onGroupClick={handleGroupClick} />
       </div>
 
-      {/* Center + Right panels */}
-      {showGroupDetail && (
-        <>
-          {/* Mobile back button */}
-          <button
-            onClick={() => selectGroup(null)}
-            className="fixed top-20 left-4 z-30 flex items-center gap-1 rounded-lg border border-border bg-white px-3 py-1.5 text-sm text-muted-foreground shadow-sm lg:hidden"
+      {/* Inline preview panel — sits beside, no overlay */}
+      <AnimatePresence mode="wait">
+        {showPanel && (
+          <motion.div
+            key={previewGroupId}
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 480, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="flex-shrink-0 overflow-hidden"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </button>
-
-          {/* Center: Word Cloud + AI Summary + Mind Map */}
-          <div className="hidden flex-1 flex-col gap-4 overflow-hidden lg:flex">
-            <div className="h-[45%] overflow-auto rounded-xl border border-border bg-white p-4">
-              <AISummaryPanel />
+            <div className="h-full w-[480px]">
+              <GroupPreviewPanel />
             </div>
-            <div className="flex-1 overflow-hidden rounded-xl border border-border bg-white p-4">
-              <MindMap />
-            </div>
-          </div>
-
-          {/* Right: Chat Panel */}
-          <div className="flex w-full flex-col lg:w-[340px] lg:flex-shrink-0">
-            <div className="flex-1 overflow-hidden rounded-xl border border-border bg-white">
-              <NetworkingChat />
-            </div>
-            {/* Mobile: stacked mind map below chat */}
-            <div className="mt-4 h-[300px] overflow-hidden rounded-xl border border-border bg-white p-4 lg:hidden">
-              <MindMap />
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Empty state when no group selected on desktop */}
-      {!showGroupDetail && (
-        <div className="hidden flex-1 items-center justify-center lg:flex">
-          <p className="text-sm text-muted-foreground">
-            Select a group to start networking
-          </p>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { useNetworkingStore } from "@/lib/stores/networkingStore";
 import { ChatMessage } from "./ChatMessage";
 
-export function NetworkingChat() {
+interface NetworkingChatProps {
+  showJoinButton?: boolean;
+}
+
+export function NetworkingChat({ showJoinButton = true }: NetworkingChatProps) {
   const selectedGroupId = useNetworkingStore((s) => s.selectedGroupId);
   const messages = useNetworkingStore((s) => s.messages);
   const isMember = useNetworkingStore((s) => s.isMember);
@@ -70,9 +74,10 @@ export function NetworkingChat() {
     if (!selectedGroupId) return;
     setJoining(true);
     try {
+      const method = isMember ? "DELETE" : "POST";
       const res = await fetch(
         `/api/networking/groups/${selectedGroupId}/members`,
-        { method: isMember ? "DELETE" : "POST" }
+        { method }
       );
       if (res.ok) {
         setIsMember(!isMember);
@@ -80,13 +85,18 @@ export function NetworkingChat() {
         if (data.memberCount != null) {
           updateGroupMemberCount(selectedGroupId, data.memberCount);
         } else {
-          // Recalculate from current
           const current = group?.memberCount ?? 0;
           updateGroupMemberCount(
             selectedGroupId,
             isMember ? Math.max(current - 1, 0) : current + 1
           );
         }
+      } else if (res.status === 400 && method === "POST") {
+        // Already a member — sync UI state
+        setIsMember(true);
+      } else if (res.status === 400 && method === "DELETE") {
+        // Not a member — sync UI state
+        setIsMember(false);
       }
     } finally {
       setJoining(false);
@@ -100,24 +110,26 @@ export function NetworkingChat() {
         <h3 className="text-sm font-semibold text-foreground truncate">
           {group?.name ?? "Chat"}
         </h3>
-        <Button
-          variant={isMember ? "outline" : "default"}
-          size="sm"
-          onClick={handleJoinLeave}
-          disabled={joining}
-        >
-          {isMember ? (
-            <>
-              <LogOutIcon className="h-3.5 w-3.5" />
-              Leave
-            </>
-          ) : (
-            <>
-              <LogIn className="h-3.5 w-3.5" />
-              Join
-            </>
-          )}
-        </Button>
+        {showJoinButton && (
+          <Button
+            variant={isMember ? "outline" : "default"}
+            size="sm"
+            onClick={handleJoinLeave}
+            disabled={joining}
+          >
+            {isMember ? (
+              <>
+                <LogOutIcon className="h-3.5 w-3.5" />
+                Leave
+              </>
+            ) : (
+              <>
+                <LogIn className="h-3.5 w-3.5" />
+                Join
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Messages */}

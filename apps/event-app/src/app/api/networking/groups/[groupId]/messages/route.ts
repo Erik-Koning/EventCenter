@@ -63,19 +63,9 @@ export async function GET(
 ) {
   const authResult = await requireAuth();
   if (!authResult.success) return authResult.response;
-  const { user } = authResult;
   const { groupId } = await params;
 
   try {
-    // Verify membership
-    const membership = await db.query.networkingGroupMembers.findFirst({
-      where: and(
-        eq(networkingGroupMembers.groupId, groupId),
-        eq(networkingGroupMembers.userId, user.id)
-      ),
-    });
-    if (!membership) return commonErrors.forbidden();
-
     const url = new URL(request.url);
     const after = url.searchParams.get("after");
 

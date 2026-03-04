@@ -7,9 +7,17 @@ let client: WebPubSubServiceClient | null = null;
 function getClient(): WebPubSubServiceClient | null {
   if (client) return client;
   const connStr = process.env.AZURE_WEB_PUBSUB_CONNECTION_STRING;
-  if (!connStr) return null;
-  client = new WebPubSubServiceClient(connStr, HUB_NAME);
-  return client;
+  if (!connStr) {
+    console.warn("[pubsub] AZURE_WEB_PUBSUB_CONNECTION_STRING is not set");
+    return null;
+  }
+  try {
+    client = new WebPubSubServiceClient(connStr, HUB_NAME);
+    return client;
+  } catch (error) {
+    console.warn("[pubsub] Invalid connection string:", error);
+    return null;
+  }
 }
 
 export async function broadcastToGroup(

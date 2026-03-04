@@ -123,7 +123,7 @@ export function useNetworkingPolling() {
 
   // WebSocket + initial REST load for messages and mindmap
   useEffect(() => {
-    if (!selectedGroupId || !isMember) return;
+    if (!selectedGroupId) return;
     let active = true;
     let wsClient: WebPubSubClient | null = null;
     let msgPollInterval: ReturnType<typeof setInterval> | null = null;
@@ -181,9 +181,15 @@ export function useNetworkingPolling() {
     async function connectWebSocket() {
       try {
         const res = await fetch("/api/networking/pubsub/negotiate");
-        if (!res.ok) return false;
+        if (!res.ok) {
+          console.warn("[PubSub] Negotiate failed with status", res.status, "— falling back to polling");
+          return false;
+        }
         const { url } = await res.json();
-        if (!url || !active) return false;
+        if (!url || !active) {
+          console.warn("[PubSub] No WebSocket URL returned — falling back to polling");
+          return false;
+        }
 
         wsClient = new WebPubSubClient(url);
         wsClientRef.current = wsClient;
@@ -197,7 +203,10 @@ export function useNetworkingPolling() {
         });
 
         wsClient.on("disconnected", () => {
-          if (active) setWsConnected(false);
+          if (active) {
+            console.warn("[PubSub] WebSocket disconnected");
+            setWsConnected(false);
+          }
         });
 
         wsClient.on("connected", () => {
@@ -206,12 +215,14 @@ export function useNetworkingPolling() {
 
         await wsClient.start();
         return true;
-      } catch {
+      } catch (err) {
+        console.warn("[PubSub] WebSocket connection failed — falling back to polling", err);
         return false;
       }
     }
 
     function startPollingFallback() {
+      console.warn("[PubSub] Using polling fallback for messages and mindmap");
       msgPollInterval = setInterval(fetchMessages, MESSAGES_POLL_MS);
       mindmapPollInterval = setInterval(fetchMindMap, MINDMAP_POLL_MS);
     }
@@ -227,7 +238,6 @@ export function useNetworkingPolling() {
       if (!active) return;
 
       if (!connected) {
-        // Fall back to polling if WebSocket negotiation fails
         startPollingFallback();
       }
     }
@@ -246,7 +256,6 @@ export function useNetworkingPolling() {
     };
   }, [
     selectedGroupId,
-    isMember,
     setMessages,
     appendMessages,
     setMessagesLoading,

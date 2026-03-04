@@ -40,6 +40,10 @@ interface NetworkingState {
   mindMapNodes: MindMapNode[];
   isMember: boolean;
 
+  // Preview panel state
+  previewGroupId: string | null;
+  previewIsMember: boolean;
+
   // Connection state
   wsConnected: boolean;
 
@@ -58,6 +62,8 @@ interface NetworkingState {
   addMindMapNode: (node: MindMapNode) => void;
   removeMindMapNode: (nodeId: string) => void;
   setIsMember: (isMember: boolean) => void;
+  setPreviewGroupId: (id: string | null) => void;
+  setPreviewIsMember: (isMember: boolean) => void;
   setWsConnected: (connected: boolean) => void;
   setGroupsLoading: (loading: boolean) => void;
   setMessagesLoading: (loading: boolean) => void;
@@ -74,6 +80,8 @@ export const useNetworkingStore = create<NetworkingState>((set) => ({
   messages: [],
   mindMapNodes: [],
   isMember: false,
+  previewGroupId: null,
+  previewIsMember: false,
   wsConnected: false,
   groupsLoading: false,
   messagesLoading: false,
@@ -94,7 +102,15 @@ export const useNetworkingStore = create<NetworkingState>((set) => ({
       return { messages: [...state.messages, ...unique] };
     }),
 
-  setMindMapNodes: (nodes) => set({ mindMapNodes: nodes }),
+  setMindMapNodes: (nodes) => {
+    const seen = new Set<string>();
+    const unique = nodes.filter((n) => {
+      if (seen.has(n.id)) return false;
+      seen.add(n.id);
+      return true;
+    });
+    set({ mindMapNodes: unique });
+  },
 
   updateMindMapNode: (nodeId, updates) =>
     set((state) => ({
@@ -104,7 +120,10 @@ export const useNetworkingStore = create<NetworkingState>((set) => ({
     })),
 
   addMindMapNode: (node) =>
-    set((state) => ({ mindMapNodes: [...state.mindMapNodes, node] })),
+    set((state) => {
+      if (state.mindMapNodes.some((n) => n.id === node.id)) return state;
+      return { mindMapNodes: [...state.mindMapNodes, node] };
+    }),
 
   removeMindMapNode: (nodeId) =>
     set((state) => ({
@@ -112,6 +131,8 @@ export const useNetworkingStore = create<NetworkingState>((set) => ({
     })),
 
   setIsMember: (isMember) => set({ isMember }),
+  setPreviewGroupId: (id) => set({ previewGroupId: id, previewIsMember: false }),
+  setPreviewIsMember: (isMember) => set({ previewIsMember: isMember }),
   setWsConnected: (connected) => set({ wsConnected: connected }),
   setGroupsLoading: (loading) => set({ groupsLoading: loading }),
   setMessagesLoading: (loading) => set({ messagesLoading: loading }),

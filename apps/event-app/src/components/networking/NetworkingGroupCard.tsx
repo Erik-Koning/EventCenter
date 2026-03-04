@@ -19,7 +19,7 @@ export function NetworkingGroupCard({
     <button
       onClick={onSelect}
       className={cn(
-        "w-full rounded-xl border border-border bg-white p-4 text-left transition-all duration-150",
+        "w-[220px] rounded-xl border border-border bg-white p-4 text-left transition-all duration-150",
         isSelected
           ? "border-primary/30 bg-primary/[0.03] shadow-sm"
           : "hover:border-border/60 hover:shadow-sm"
