@@ -29,6 +29,7 @@ export const networkingGroups = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     topWords: jsonb("top_words").$type<string[]>().default([]),
+    insights: jsonb("insights").$type<string[]>().default([]),
     memberCount: integer("member_count").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

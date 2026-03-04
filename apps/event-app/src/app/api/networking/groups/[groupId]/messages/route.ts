@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { eq, and, gt, desc, asc } from "drizzle-orm";
+import { eq, and, gt, desc, asc, count } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   networkingGroups,
@@ -12,6 +12,7 @@ import { requireAuth } from "@/lib/authorization";
 import { handleApiError, commonErrors } from "@/lib/api-error";
 import { createId } from "@/lib/utils";
 import { broadcastToGroup } from "@/lib/pubsub";
+import { generateInsights } from "@/lib/networking/generate-insights";
 
 const sendMessageSchema = z.object({
   content: z.string().min(1).max(5000),
@@ -150,6 +151,22 @@ export async function POST(
       type: "message:new",
       data: { ...message, userName: user.name, topWords },
     });
+
+    // Trigger insight generation every 5 non-AI messages (fire-and-forget)
+    const [{ value: msgCount }] = await db
+      .select({ value: count() })
+      .from(networkingMessages)
+      .where(
+        and(
+          eq(networkingMessages.groupId, groupId),
+          eq(networkingMessages.isAiSummary, false)
+        )
+      );
+    if (msgCount % 5 === 0) {
+      generateInsights(groupId).catch((err) =>
+        console.error("[messages:POST] generateInsights error:", err)
+      );
+    }
 
     return NextResponse.json(
       { ...message, userName: user.name, topWords },

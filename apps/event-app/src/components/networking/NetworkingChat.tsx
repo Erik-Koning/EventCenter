@@ -136,7 +136,7 @@ export function NetworkingChat({ showJoinButton = true }: NetworkingChatProps) {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-3 space-y-3"
       >
         {!isMember ? (
           <div className="flex h-full items-center justify-center">

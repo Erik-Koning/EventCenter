@@ -198,7 +198,7 @@ export function GroupPreviewPanel() {
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex h-32 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -299,46 +299,24 @@ export function GroupPreviewPanel() {
               </div>
             </div>
 
-            {/* Chat preview */}
+            {/* Chat preview messages */}
             <div className="border-t border-border px-4 py-3">
               <h4 className="mb-2 text-xs font-semibold text-foreground">Chat</h4>
               {previewIsMember ? (
-                <>
-                  <div
-                    ref={scrollRef}
-                    className="max-h-[200px] space-y-2 overflow-y-auto"
-                  >
-                    {previewMessages.length === 0 ? (
-                      <p className="text-[11px] text-muted-foreground">
-                        No messages yet — say hello!
-                      </p>
-                    ) : (
-                      previewMessages.map((msg) => (
-                        <ChatMessage key={msg.id} message={msg} />
-                      ))
-                    )}
-                  </div>
-                  <form
-                    onSubmit={handleSendPreview}
-                    className="mt-2 flex items-center gap-2"
-                  >
-                    <input
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Type a message..."
-                      maxLength={5000}
-                      className="flex-1 rounded-lg border border-input bg-transparent px-3 py-1.5 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                    />
-                    <Button
-                      type="submit"
-                      size="icon"
-                      className="h-7 w-7"
-                      disabled={!chatInput.trim() || sending}
-                    >
-                      <Send className="h-3 w-3" />
-                    </Button>
-                  </form>
-                </>
+                <div
+                  ref={scrollRef}
+                  className="max-h-[200px] space-y-2 overflow-y-auto"
+                >
+                  {previewMessages.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      No messages yet — say hello!
+                    </p>
+                  ) : (
+                    previewMessages.map((msg) => (
+                      <ChatMessage key={msg.id} message={msg} />
+                    ))
+                  )}
+                </div>
               ) : (
                 <div className="flex h-16 items-center justify-center rounded-lg bg-secondary/30">
                   <p className="text-[11px] text-muted-foreground">
@@ -350,6 +328,30 @@ export function GroupPreviewPanel() {
           </>
         )}
       </div>
+
+      {/* Chat input — pinned at bottom */}
+      {previewIsMember && (
+        <form
+          onSubmit={handleSendPreview}
+          className="flex items-center gap-2 border-t border-border px-4 py-3"
+        >
+          <input
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            placeholder="Type a message..."
+            maxLength={5000}
+            className="flex-1 rounded-lg border border-input bg-transparent px-3 py-1.5 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            className="h-7 w-7"
+            disabled={!chatInput.trim() || sending}
+          >
+            <Send className="h-3 w-3" />
+          </Button>
+        </form>
+      )}
     </div>
   );
 }
