@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import Link from "next/link";
+import { cn } from "@common/lib/utils";
 import { Clock, MapPin } from "lucide-react";
 import type { Speaker, Session } from "@/data/types";
 import { formatTimeRange } from "@/lib/time";
@@ -10,12 +11,12 @@ interface SpeakerCardProps {
   sessions: Session[];
 }
 
-const TRACK_COLORS: Record<string, string> = {
-  Leadership: "border-l-primary",
-  Technology: "border-l-blue-500",
-  Strategy: "border-l-amber-500",
-  Innovation: "border-l-emerald-500",
-  Culture: "border-l-violet-500",
+const TRACK_DOT_COLORS: Record<string, string> = {
+  Leadership: "bg-red-500",
+  Technology: "bg-blue-500",
+  Strategy: "bg-amber-500",
+  Innovation: "bg-emerald-500",
+  Culture: "bg-violet-500",
 };
 
 export function SpeakerCard({ speaker, sessions }: SpeakerCardProps) {
@@ -65,9 +66,9 @@ export function SpeakerCard({ speaker, sessions }: SpeakerCardProps) {
 }
 
 function SessionRow({ session }: { session: Session }) {
-  const trackColor = session.track
-    ? TRACK_COLORS[session.track] ?? "border-l-gray-300"
-    : "border-l-gray-300";
+  const dotColor = session.track
+    ? TRACK_DOT_COLORS[session.track] ?? "bg-gray-400"
+    : "bg-gray-400";
 
   const dateLabel = (() => {
     try {
@@ -80,9 +81,21 @@ function SessionRow({ session }: { session: Session }) {
   return (
     <Link
       href={`/sessions/${session.id}?from=speakers`}
-      className={`block rounded-lg border border-border bg-gradient-to-br from-primary/[0.02] to-transparent p-3 border-l-[3px] transition-shadow hover:shadow-sm ${trackColor}`}
+      className="group block rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08]"
     >
-      <p className="text-sm font-medium text-foreground">{session.title}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-foreground transition-colors group-hover:text-primary">
+          {session.title}
+        </p>
+        {session.track && (
+          <div className="flex flex-shrink-0 items-center gap-1.5">
+            <span className={cn("h-1.5 w-1.5 rounded-full", dotColor)} />
+            <span className="text-[10px] font-medium text-muted-foreground">
+              {session.track}
+            </span>
+          </div>
+        )}
+      </div>
       <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1">
           <Clock className="h-3 w-3" />

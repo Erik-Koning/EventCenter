@@ -9,6 +9,29 @@ import { broadcastToGroup } from "@/lib/pubsub";
 import { createId } from "@/lib/utils";
 const SIA_USER_ID = "sia-agent";
 
+let siaUserEnsured = false;
+
+async function ensureSiaUser() {
+  if (siaUserEnsured) return;
+  const existing = await db.query.users.findFirst({
+    where: eq(users.id, SIA_USER_ID),
+    columns: { id: true },
+  });
+  if (!existing) {
+    await db.insert(users).values({
+      id: SIA_USER_ID,
+      email: "sia@system.local",
+      name: "Sia",
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      role: "user",
+      blocked: false,
+    }).onConflictDoNothing();
+  }
+  siaUserEnsured = true;
+}
+
 const webSearchTool = new DynamicStructuredTool({
   name: "web_search",
   description:
@@ -91,6 +114,8 @@ INSTRUCTIONS:
 
 export async function runSiaAgent(groupId: string): Promise<void> {
   try {
+    await ensureSiaUser();
+
     // Fetch last 50 non-AI messages with user names
     const allMessages = await db
       .select({

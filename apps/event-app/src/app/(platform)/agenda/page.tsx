@@ -12,6 +12,7 @@ import { DAY_RECAPS } from "@/data/day-recaps";
 import { useEventStore } from "@/lib/stores/eventStore";
 import { useEventSessions } from "@/hooks/useEventData";
 import { FileText } from "lucide-react";
+import { AgendaSkeleton } from "@/components/skeletons/AgendaSkeleton";
 
 export default function AgendaPage() {
   const currentEvent = useEventStore((s) => s.currentEvent);
@@ -57,10 +58,8 @@ export default function AgendaPage() {
   if (isLoading) {
     return (
       <>
-        <PageHeader title="Agenda" subtitle="Loading..." />
-        <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
-          Loading sessions...
-        </div>
+        <PageHeader title="Agenda" subtitle="Three days of strategic sessions, workshops, and keynotes" />
+        <AgendaSkeleton />
       </>
     );
   }
@@ -81,18 +80,18 @@ export default function AgendaPage() {
         <TabsList className="mb-6 flex items-start gap-2 bg-transparent p-0">
           {days.map((date, i) => (
             <div key={date} className="flex flex-col items-start gap-1.5">
-              <div
+              <TabsTrigger
+                value={`day-${i}`}
+                variant="blank"
                 className={cn(
-                  "rounded-xl px-1 py-1 transition-colors",
+                  "rounded-xl px-4 py-2 text-sm font-medium transition-all",
                   activeDayIndex === i
-                    ? "bg-primary/15"
-                    : "bg-primary/[0.06]"
+                    ? "bg-primary text-white shadow-sm"
+                    : "border border-border bg-white text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
-                <TabsTrigger value={`day-${i}`}>
-                  {formatDayLabel(date, i + 1)}
-                </TabsTrigger>
-              </div>
+                {formatDayLabel(date, i + 1)}
+              </TabsTrigger>
               {i === 0 && (
                 <button
                   onClick={() => setRecapDay(1)}
@@ -107,7 +106,7 @@ export default function AgendaPage() {
         </TabsList>
 
         {days.map((date, i) => (
-          <TabsContent key={date} value={`day-${i}`}>
+          <TabsContent key={date} value={`day-${i}`} variant="blank">
             <DayCalendar sessions={sessionsByDate[date] ?? []} />
           </TabsContent>
         ))}

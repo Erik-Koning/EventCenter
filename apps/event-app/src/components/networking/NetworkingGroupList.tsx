@@ -2,6 +2,7 @@
 
 import { useNetworkingStore } from "@/lib/stores/networkingStore";
 import { NetworkingGroupCard } from "./NetworkingGroupCard";
+import { NetworkingSkeleton } from "@/components/skeletons/NetworkingSkeleton";
 
 interface NetworkingGroupListProps {
   onGroupClick?: (groupId: string) => void;
@@ -13,11 +14,7 @@ export function NetworkingGroupList({ onGroupClick }: NetworkingGroupListProps) 
   const previewGroupId = useNetworkingStore((s) => s.previewGroupId);
 
   if (groupsLoading && groups.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading groups...</p>
-      </div>
-    );
+    return <NetworkingSkeleton />;
   }
 
   if (groups.length === 0) {

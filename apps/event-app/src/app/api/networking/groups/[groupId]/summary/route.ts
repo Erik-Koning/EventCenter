@@ -63,7 +63,7 @@ export async function GET(
     const summary =
       topWords.length > 0
         ? `Key topics being discussed: ${topWords.join(", ")}`
-        : "No messages yet — start the conversation!";
+        : "";
 
     return NextResponse.json({
       summary,

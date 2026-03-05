@@ -2,13 +2,35 @@
 
 import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
-import { useNetworkingStore } from "@/lib/stores/networkingStore";
+import { useNetworkingStore, type Insight } from "@/lib/stores/networkingStore";
 
 interface SummaryData {
   summary: string;
   topWords: string[];
   recentExcerpts: { author: string; preview: string }[];
   messageCount: number;
+}
+
+function InsightBadge({ insight }: { insight: Insight }) {
+  const [showDesc, setShowDesc] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowDesc((v) => !v)}
+        className="inline-flex rounded-full bg-primary/[0.06] px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/[0.12]"
+      >
+        {insight.title}
+      </button>
+      {showDesc && (
+        <div className="absolute left-0 top-full z-10 mt-1 w-56 rounded-lg border border-border bg-white p-2.5 shadow-md">
+          <p className="text-[11px] leading-relaxed text-foreground">
+            {insight.description}
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function AISummaryPanel() {
@@ -51,15 +73,10 @@ export function AISummaryPanel() {
       </div>
 
       {/* Insight labels */}
-      <div className="flex flex-wrap gap-1.5 min-h-[80px]">
+      <div className="flex flex-wrap gap-1.5 min-h-[80px] overflow-y-auto">
         {insights.length > 0 ? (
-          insights.map((insight) => (
-            <span
-              key={insight}
-              className="inline-flex rounded-full bg-primary/[0.06] px-2.5 py-1 text-xs font-medium text-primary"
-            >
-              {insight}
-            </span>
+          insights.map((insight, i) => (
+            <InsightBadge key={`${insight.title}-${i}`} insight={insight} />
           ))
         ) : (
           <p className="text-xs text-muted-foreground">

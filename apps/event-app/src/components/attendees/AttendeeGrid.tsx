@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useEventStore } from "@/lib/stores/eventStore";
 import { useEventAttendees, useEventSpeakers } from "@/hooks/useEventData";
 import { AttendeeCard } from "./AttendeeCard";
+import { AttendeesSkeleton } from "@/components/skeletons/AttendeesSkeleton";
 
 interface AttendeeGridProps {
   search: string;
@@ -26,11 +27,7 @@ export function AttendeeGrid({ search }: AttendeeGridProps) {
   }, [search, attendees]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
-        Loading attendees...
-      </div>
-    );
+    return <AttendeesSkeleton />;
   }
 
   return (

@@ -307,17 +307,19 @@ export function ChatWidget() {
                         : "bg-muted"
                     }`}
                   >
-                    {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
+                    {msg.role === "assistant" && !msg.content ? (
+                      <div className="flex items-center gap-1.5 py-0.5">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Thinking...</span>
+                      </div>
+                    ) : msg.role === "assistant" ? (
+                      renderMarkdown(msg.content)
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                 </div>
               ))}
-              {isLoading && !messages.some((m) => m.role === "assistant" && m.content === "") && (
-                <div className="flex justify-start">
-                  <div className="rounded-2xl bg-muted px-3 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
-                </div>
-              )}
               {error && (
                 <div className="text-center text-xs text-destructive py-1">
                   {error}

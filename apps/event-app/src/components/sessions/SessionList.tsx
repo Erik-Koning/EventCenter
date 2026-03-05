@@ -8,6 +8,7 @@ import { useEventStore } from "@/lib/stores/eventStore";
 import { useEventSessions } from "@/hooks/useEventData";
 import { useSessionStore } from "@/lib/stores/sessionStore";
 import { SessionCard } from "./SessionCard";
+import { SessionsSkeleton } from "@/components/skeletons/SessionsSkeleton";
 
 function formatDayLabel(dateStr: string, dayNum: number) {
   const date = new Date(dateStr + "T12:00:00");
@@ -80,11 +81,7 @@ export function SessionList() {
   }, [sessions, userSessions, upvotes]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
-        Loading sessions...
-      </div>
-    );
+    return <SessionsSkeleton />;
   }
 
   return (
@@ -94,19 +91,19 @@ export function SessionList() {
     >
       <TabsList className="mb-6 flex items-start gap-2 bg-transparent p-0">
         {days.map((date, i) => (
-          <div
+          <TabsTrigger
             key={date}
+            value={`day-${i}`}
+            variant="blank"
             className={cn(
-              "rounded-xl px-1 py-1 transition-colors",
+              "rounded-xl px-4 py-2 text-sm font-medium transition-all",
               activeDayIndex === i
-                ? "bg-primary/15"
-                : "bg-primary/[0.06]"
+                ? "bg-primary text-white shadow-sm"
+                : "border border-border bg-white text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
-            <TabsTrigger value={`day-${i}`}>
-              {formatDayLabel(date, i + 1)}
-            </TabsTrigger>
-          </div>
+            {formatDayLabel(date, i + 1)}
+          </TabsTrigger>
         ))}
       </TabsList>
 

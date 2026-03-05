@@ -19,6 +19,7 @@ export function NetworkingChat({ showJoinButton = true }: NetworkingChatProps) {
   const updateGroupTopWords = useNetworkingStore((s) => s.updateGroupTopWords);
   const updateGroupMemberCount = useNetworkingStore((s) => s.updateGroupMemberCount);
   const groups = useNetworkingStore((s) => s.groups);
+  const hasInsights = (groups.find((g) => g.id === selectedGroupId)?.insights ?? []).length > 0;
 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -144,13 +145,13 @@ export function NetworkingChat({ showJoinButton = true }: NetworkingChatProps) {
               Join this group to see messages and chat
             </p>
           </div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !hasInsights ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-muted-foreground">
               No messages yet — say hello!
             </p>
           </div>
-        ) : (
+        ) : messages.length === 0 ? null : (
           messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)
         )}
       </div>

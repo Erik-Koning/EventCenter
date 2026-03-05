@@ -44,25 +44,25 @@ export async function PUT(request: Request) {
       where: eq(attendees.userId, user.id),
     });
 
-    if (attendee) {
-      const enrollment = await db.query.eventAttendees.findFirst({
-        where: and(
-          eq(eventAttendees.eventId, eventId),
-          eq(eventAttendees.attendeeId, attendee.id)
-        ),
-      });
-
-      if (!enrollment) {
-        return commonErrors.forbidden();
-      }
-    } else {
+    if (!attendee) {
       return commonErrors.forbidden();
     }
 
-    // Update user's current event
+    const enrollment = await db.query.eventAttendees.findFirst({
+      where: and(
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.attendeeId, attendee.id)
+      ),
+    });
+
+    if (!enrollment) {
+      return commonErrors.forbidden();
+    }
+
+    // Update user's current event and role from guestlist atomically
     await db
       .update(users)
-      .set({ currentEventId: eventId })
+      .set({ currentEventId: eventId, role: enrollment.role })
       .where(eq(users.id, user.id));
 
     const event = await db.query.events.findFirst({

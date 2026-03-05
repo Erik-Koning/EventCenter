@@ -39,10 +39,14 @@ export function useNetworkingPolling() {
     let active = true;
 
     async function fetchGroups() {
+      if (!currentEvent?.id) {
+        setGroups([]);
+        setGroupsLoading(false);
+        return;
+      }
       try {
         setGroupsLoading(true);
-        const params = currentEvent?.id ? `?eventId=${currentEvent.id}` : "";
-        const res = await fetch(`/api/networking/groups${params}`);
+        const res = await fetch(`/api/networking/groups?eventId=${currentEvent.id}`);
         if (res.ok && active) {
           const data = await res.json();
           setGroups(data);
@@ -84,7 +88,7 @@ export function useNetworkingPolling() {
           break;
         }
         case "insights:updated": {
-          const { insights } = data as unknown as { insights: string[] };
+          const { insights } = data as unknown as { insights: { title: string; description: string }[] };
           if (insights && selectedGroupId) {
             updateGroupInsights(selectedGroupId, insights);
           }
@@ -110,10 +114,12 @@ export function useNetworkingPolling() {
         }
         case "member:leave":
           // Re-fetch groups to get updated count
-          fetch("/api/networking/groups")
-            .then((r) => r.json())
-            .then(setGroups)
-            .catch(() => {});
+          if (currentEvent?.id) {
+            fetch(`/api/networking/groups?eventId=${currentEvent.id}`)
+              .then((r) => r.json())
+              .then(setGroups)
+              .catch(() => {});
+          }
           break;
       }
     },
@@ -127,6 +133,7 @@ export function useNetworkingPolling() {
       updateGroupInsights,
       setGroups,
       selectedGroupId,
+      currentEvent?.id,
     ]
   );
 

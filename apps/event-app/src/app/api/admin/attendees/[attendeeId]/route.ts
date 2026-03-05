@@ -12,6 +12,9 @@ const updateAttendeeSchema = z.object({
   imageUrl: z.string().optional(),
   initials: z.string().max(10).optional(),
   userId: z.string().nullable().optional(),
+  isSpeaker: z.boolean().optional(),
+  company: z.string().max(255).nullable().optional(),
+  bio: z.string().nullable().optional(),
 });
 
 type RouteParams = { params: Promise<{ attendeeId: string }> };

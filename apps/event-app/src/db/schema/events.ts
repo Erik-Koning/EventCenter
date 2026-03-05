@@ -47,6 +47,7 @@ export const eventAttendees = pgTable(
     attendeeId: varchar("attendee_id", { length: 255 })
       .notNull()
       .references(() => attendees.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 50 }).default("user").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

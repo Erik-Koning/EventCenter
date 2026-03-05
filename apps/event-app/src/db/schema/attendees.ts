@@ -2,12 +2,13 @@
  * Attendees Schema
  */
 
-import { 
-  pgTable, 
-  varchar, 
-  text, 
+import {
+  pgTable,
+  varchar,
+  text,
   timestamp,
-  index 
+  boolean,
+  index
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 
@@ -22,6 +23,10 @@ export const attendees = pgTable(
     title: varchar("title", { length: 255 }),
     imageUrl: text("image_url"),
     initials: varchar("initials", { length: 10 }),
+    isSpeaker: boolean("is_speaker").default(false).notNull(),
+    company: varchar("company", { length: 255 }),
+    bio: text("bio"),
+    interests: text("interests"),
     userId: varchar("user_id", { length: 255 }).references(() => users.id, {
       onDelete: "set null",
     }),

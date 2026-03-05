@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@source "../../../packages/common/src";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -68,6 +70,16 @@
   --backdrop-blur-lg: blur(20px);
   --backdrop-blur-sm: blur(8px);
 
+  /* HoverBarMenuArray colors — matched to sidebar nav style */
+  --darkPurple: #dc2626;
+  --charcoalBlue: #dc2626;
+  --taupeGrayLight: #f87171;
+  --taupeGrayFaint: #f9fafb;
+  --faintPurple: rgba(220, 38, 38, 0.06);
+  --secondary-dark: #6b7280;
+  --primary-dark: #991b1b;
+  --secondary-light: #f3f4f6;
+
   /* Fonts */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-serif: Georgia, serif;
@@ -125,6 +137,15 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  --color-darkPurple: var(--darkPurple);
+  --color-charcoalBlue: var(--charcoalBlue);
+  --color-taupeGrayLight: var(--taupeGrayLight);
+  --color-taupeGrayFaint: var(--taupeGrayFaint);
+  --color-faintPurple: var(--faintPurple);
+  --color-secondary-dark: var(--secondary-dark);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary-light: var(--secondary-light);
+
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
@@ -142,6 +163,54 @@
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
   --shadow-2xl: var(--shadow-2xl);
+
+  /* HoverBarMenuArray directional underline animations */
+  --animate-slideInFromTop: slideInFromTop 200ms ease-out forwards;
+  --animate-slideInFromBottom: slideInFromBottom 200ms ease-out forwards;
+  --animate-slideInFromLeft: slideInFromLeft 300ms ease-out forwards;
+  --animate-slideInFromRight: slideInFromRight 300ms ease-out forwards;
+  --animate-slideOutToTop: slideOutToTop 200ms ease-in forwards;
+  --animate-slideOutToBottom: slideOutToBottom 200ms ease-in forwards;
+  --animate-slideOutToLeft: slideOutToLeft 200ms ease-in forwards;
+  --animate-slideOutToRight: slideOutToRight 200ms ease-in forwards;
+  --animate-fadeOut: fadeOut 300ms ease-out forwards;
+
+  @keyframes slideInFromTop {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes slideInFromBottom {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes slideInFromLeft {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes slideInFromRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes slideOutToTop {
+    from { transform: translateY(0); opacity: 1; }
+    to { transform: translateY(-100%); opacity: 0; }
+  }
+  @keyframes slideOutToBottom {
+    from { transform: translateY(0); opacity: 1; }
+    to { transform: translateY(100%); opacity: 0; }
+  }
+  @keyframes slideOutToLeft {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(-100%); opacity: 0; }
+  }
+  @keyframes slideOutToRight {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+  }
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
 
   --animate-line-shadow: line-shadow 15s linear infinite;
   --animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;

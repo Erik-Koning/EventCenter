@@ -7,12 +7,17 @@ import { Button } from "@/components/ui/button";
 import { useNetworkingStore, type MindMapNode, type NetworkingMessage } from "@/lib/stores/networkingStore";
 import { ChatMessage } from "./ChatMessage";
 
+interface Insight {
+  title: string;
+  description: string;
+}
+
 interface GroupDetail {
   id: string;
   name: string;
   description: string | null;
   topWords: string[];
-  insights: string[];
+  insights: Insight[];
   memberCount: number;
   isMember: boolean;
   creatorName: string;
@@ -225,12 +230,13 @@ export function GroupPreviewPanel() {
               {/* Insight badges */}
               {detail?.insights && detail.insights.length > 0 && (
                 <div className="flex flex-wrap gap-1">
-                  {detail.insights.slice(0, 8).map((insight) => (
+                  {detail.insights.slice(0, 8).map((insight, i) => (
                     <span
-                      key={insight}
-                      className="inline-flex rounded-full bg-primary/[0.06] px-2 py-0.5 text-[10px] font-medium text-primary"
+                      key={`${insight.title}-${i}`}
+                      title={insight.description}
+                      className="inline-flex rounded-full bg-primary/[0.06] px-2 py-0.5 text-[10px] font-medium text-primary cursor-default"
                     >
-                      {insight}
+                      {insight.title}
                     </span>
                   ))}
                 </div>
@@ -308,11 +314,11 @@ export function GroupPreviewPanel() {
                   ref={scrollRef}
                   className="max-h-[200px] space-y-2 overflow-y-auto"
                 >
-                  {previewMessages.length === 0 ? (
+                  {previewMessages.length === 0 && !(detail?.insights && detail.insights.length > 0) ? (
                     <p className="text-[11px] text-muted-foreground">
                       No messages yet — say hello!
                     </p>
-                  ) : (
+                  ) : previewMessages.length === 0 ? null : (
                     previewMessages.map((msg) => (
                       <ChatMessage key={msg.id} message={msg} />
                     ))

@@ -1,43 +1,36 @@
 "use client";
 
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@common/components/ui/Tabs";
+import { useState } from "react";
+import { HoverBarMenuArray } from "@common/components/ui/HoverBarMenuArray";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AdminEventSelector } from "@/components/admin/AdminEventSelector";
 import { EventsTab } from "@/components/admin/EventsTab";
 import { SessionsTab } from "@/components/admin/SessionsTab";
-import { SpeakersTab } from "@/components/admin/SpeakersTab";
-import { AttendeesTab } from "@/components/admin/AttendeesTab";
 import { UsersTab } from "@/components/admin/UsersTab";
 
+const TAB_NAMES = ["Events", "Sessions", "Users"];
+const TAB_COMPONENTS = [EventsTab, SessionsTab, UsersTab];
+
 export default function AdminPage() {
+  const [activeTab, setActiveTab] = useState(0);
+  const ActiveComponent = TAB_COMPONENTS[activeTab];
+
   return (
     <div>
-      <PageHeader title="Admin" subtitle="Manage events, sessions, speakers, attendees, and users" />
+      <PageHeader
+        title="Admin"
+        subtitle="Manage events, sessions, and users"
+        action={<AdminEventSelector />}
+      />
 
-      <Tabs defaultValue="events">
-        <TabsList>
-          <TabsTrigger value="events">Events</TabsTrigger>
-          <TabsTrigger value="sessions">Sessions</TabsTrigger>
-          <TabsTrigger value="speakers">Speakers</TabsTrigger>
-          <TabsTrigger value="attendees">Attendees</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-        </TabsList>
+      <HoverBarMenuArray
+        menuBarItemTitles={TAB_NAMES}
+        defaultTabIndex={0}
+        onClick={(_e: any, index: number) => setActiveTab(index)}
+        className="mb-6"
+      />
 
-        <TabsContent value="events">
-          <EventsTab />
-        </TabsContent>
-        <TabsContent value="sessions">
-          <SessionsTab />
-        </TabsContent>
-        <TabsContent value="speakers">
-          <SpeakersTab />
-        </TabsContent>
-        <TabsContent value="attendees">
-          <AttendeesTab />
-        </TabsContent>
-        <TabsContent value="users">
-          <UsersTab />
-        </TabsContent>
-      </Tabs>
+      <ActiveComponent />
     </div>
   );
 }

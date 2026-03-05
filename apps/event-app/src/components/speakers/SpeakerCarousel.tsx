@@ -7,6 +7,7 @@ import { cn } from "@common/lib/utils";
 import { useEventStore } from "@/lib/stores/eventStore";
 import { useEventSpeakers, useEventSessions } from "@/hooks/useEventData";
 import { SpeakerCard } from "./SpeakerCard";
+import { SpeakersSkeleton } from "@/components/skeletons/SpeakersSkeleton";
 
 const AUTO_INTERVAL = 10000;
 const PAUSE_DURATION = 30000;
@@ -92,11 +93,7 @@ export function SpeakerCarousel() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-sm text-muted-foreground">
-        Loading speakers...
-      </div>
-    );
+    return <SpeakersSkeleton />;
   }
 
   if (speakers.length === 0) {
@@ -112,7 +109,7 @@ export function SpeakerCarousel() {
   return (
     <div className="flex flex-col items-center">
       {/* Carousel viewport */}
-      <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-white px-6 py-12">
+      <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-primary/[0.03] to-transparent px-6 py-12">
         {/* Progress bar */}
         <div className="absolute left-0 top-0 h-0.5 w-full bg-muted">
           <motion.div

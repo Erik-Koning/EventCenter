@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Badge } from "@common/components/ui/badge";
 import { cn } from "@common/lib/utils";
+import { Badge } from "@common/components/ui/badge";
 import { Clock, MapPin, User } from "lucide-react";
 import type { Session, Speaker } from "@/data/types";
 import { formatTimeRange } from "@/lib/time";
@@ -14,7 +14,7 @@ interface SessionCardProps {
 }
 
 const TRACK_BADGE_COLORS: Record<string, string> = {
-  Leadership: "bg-red-50 gap-2 text-red-700 border-red-200",
+  Leadership: "bg-red-50 text-red-700 border-red-200",
   Technology: "bg-blue-50 text-blue-700 border-blue-200",
   Strategy: "bg-amber-50 text-amber-700 border-amber-200",
   Innovation: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -22,21 +22,21 @@ const TRACK_BADGE_COLORS: Record<string, string> = {
 };
 
 export function SessionCard({ session, speakers }: SessionCardProps) {
-  const trackColors = session.track
+  const trackBadge = session.track
     ? TRACK_BADGE_COLORS[session.track] ?? "bg-gray-50 text-gray-700 border-gray-200"
     : "";
 
   return (
     <Link
       href={`/sessions/${session.id}`}
-      className="block rounded-xl border border-border bg-white p-5 transition-shadow hover:shadow-sm"
+      className="group block rounded-2xl bg-gradient-to-br from-white to-gray-50/80 p-5 shadow-sm ring-1 ring-black/[0.04] transition-all duration-200 hover:shadow-md hover:ring-black/[0.08]"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          {/* Tags */}
-          <div className="mb-2 flex flex-wrap gap-3">
+          {/* Track + tags */}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             {session.track && (
-              <Badge variant="outline" className={cn("text-[10px] px-2.5 py-0.5", trackColors)}>
+              <Badge variant="outline" className={cn("text-[10px] px-2 py-0.5", trackBadge)}>
                 {session.track}
               </Badge>
             )}
@@ -48,12 +48,12 @@ export function SessionCard({ session, speakers }: SessionCardProps) {
           </div>
 
           {/* Title */}
-          <h3 className="text-sm font-semibold text-foreground">
+          <h3 className="text-sm font-semibold text-foreground transition-colors group-hover:text-primary">
             {session.title}
           </h3>
 
           {/* Metadata */}
-          <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+          <div className="mt-2.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
               {formatTimeRange(session.startTime, session.endTime)}

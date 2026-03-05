@@ -336,10 +336,11 @@ export function MindMap() {
                   strokeDasharray="6 4"
                 />
                 <foreignObject
-                  x={newNodePos.x - newNodeRadius + 4}
-                  y={newNodePos.y - 15}
-                  width={(newNodeRadius - 4) * 2}
-                  height={30}
+                  x={newNodePos.x - 160}
+                  y={newNodePos.y + newNodeRadius + 12}
+                  width={320}
+                  height={44}
+                  style={{ overflow: "visible" }}
                 >
                   <input
                     ref={inlineInputRef}
@@ -359,17 +360,19 @@ export function MindMap() {
                       }
                     }}
                     onBlur={() => setCreatingFor(null)}
-                    placeholder="Label..."
+                    placeholder="Type a node label... (Enter to add)"
                     maxLength={200}
                     style={{
                       width: "100%",
-                      height: "100%",
-                      border: "none",
+                      height: "44px",
+                      padding: "0 16px",
+                      border: "1px solid var(--border)",
+                      borderRadius: "10px",
                       outline: "none",
-                      background: "transparent",
-                      textAlign: "center",
+                      background: "white",
                       fontSize: "15px",
                       color: "var(--foreground)",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                     }}
                   />
                 </foreignObject>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   events,
@@ -7,6 +8,7 @@ import {
   eventSessions,
   sessionSpeakers,
   attendees,
+  users,
 } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
@@ -90,6 +92,26 @@ export async function POST() {
       },
     ];
     await db.insert(speakers).values(speakerData);
+
+    // === ATTENDEE RECORDS FOR SPEAKERS ===
+    const speakerAttendeeRows = speakerData.map((sp) => ({
+      id: createId(),
+      name: sp.name,
+      title: sp.title,
+      initials: sp.initials,
+      isSpeaker: true,
+      company: sp.company,
+      bio: sp.bio,
+    }));
+    await db.insert(attendees).values(speakerAttendeeRows);
+
+    // Link speaker attendees to event
+    const speakerEaRows = speakerAttendeeRows.map((a) => ({
+      id: createId(),
+      eventId,
+      attendeeId: a.id,
+    }));
+    await db.insert(eventAttendees).values(speakerEaRows);
 
     // === SESSIONS (5 per day × 3 days) ===
     const sessionData = [
@@ -178,6 +200,45 @@ export async function POST() {
       attendeeId: a.id,
     }));
     await db.insert(eventAttendees).values(eaRows);
+
+    // === ADD SEEDING USER TO GUESTLIST AS ADMIN ===
+    const { user } = authResult;
+    let userAttendee = await db.query.attendees.findFirst({
+      where: eq(attendees.userId, user.id),
+    });
+    if (!userAttendee) {
+      const [created] = await db
+        .insert(attendees)
+        .values({
+          id: createId(),
+          name: user.name ?? user.email,
+          title: "Admin",
+          userId: user.id,
+          initials: (user.name ?? "A")
+            .split(/\s+/)
+            .map((w: string) => w[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2),
+        })
+        .returning();
+      userAttendee = created;
+    }
+    await db
+      .insert(eventAttendees)
+      .values({
+        id: createId(),
+        eventId,
+        attendeeId: userAttendee.id,
+        role: "admin",
+      })
+      .onConflictDoNothing();
+
+    // Set as current event
+    await db
+      .update(users)
+      .set({ currentEventId: eventId, role: "admin" })
+      .where(eq(users.id, user.id));
 
     return NextResponse.json(event, { status: 201 });
   } catch (error) {

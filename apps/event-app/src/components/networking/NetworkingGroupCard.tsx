@@ -38,12 +38,13 @@ export function NetworkingGroupCard({
       {/* Insight badges */}
       {group.insights && group.insights.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
-          {group.insights.slice(0, 5).map((insight) => (
+          {group.insights.slice(0, 5).map((insight, i) => (
             <span
-              key={insight}
-              className="inline-flex rounded-full bg-primary/[0.06] px-2 py-0.5 text-[10px] font-medium text-primary"
+              key={`${insight.title}-${i}`}
+              title={insight.description}
+              className="inline-flex rounded-full bg-primary/[0.06] px-2 py-0.5 text-[10px] font-medium text-primary cursor-default"
             >
-              {insight}
+              {insight.title}
             </span>
           ))}
         </div>

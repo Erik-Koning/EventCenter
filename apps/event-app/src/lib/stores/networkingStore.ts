@@ -1,5 +1,10 @@
 import { create } from "zustand";
 
+export interface Insight {
+  title: string;
+  description: string;
+}
+
 export interface NetworkingGroup {
   id: string;
   name: string;
@@ -7,7 +12,7 @@ export interface NetworkingGroup {
   creatorId: string;
   creatorName: string;
   topWords: string[];
-  insights: string[];
+  insights: Insight[];
   memberCount: number;
   createdAt: string;
 }
@@ -72,7 +77,7 @@ interface NetworkingState {
   addGroup: (group: NetworkingGroup) => void;
   removeGroup: (groupId: string) => void;
   updateGroupTopWords: (groupId: string, topWords: string[]) => void;
-  updateGroupInsights: (groupId: string, insights: string[]) => void;
+  updateGroupInsights: (groupId: string, insights: Insight[]) => void;
   updateGroupMemberCount: (groupId: string, memberCount: number) => void;
 }
 
