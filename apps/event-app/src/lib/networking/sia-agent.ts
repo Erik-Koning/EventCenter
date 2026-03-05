@@ -7,15 +7,7 @@ import { networkingMessages, users } from "@/db/schema";
 import { getModelMini } from "@/lib/ai/model";
 import { broadcastToGroup } from "@/lib/pubsub";
 import { createId } from "@/lib/utils";
-import Exa from "exa-js";
-
 const SIA_USER_ID = "sia-agent";
-
-function getExaClient(): Exa {
-  const apiKey = process.env.EXA_API_KEY;
-  if (!apiKey) throw new Error("EXA_API_KEY is required for Sia web search");
-  return new Exa(apiKey);
-}
 
 const webSearchTool = new DynamicStructuredTool({
   name: "web_search",
@@ -26,13 +18,28 @@ const webSearchTool = new DynamicStructuredTool({
   }),
   func: async ({ query }) => {
     try {
-      const exa = getExaClient();
-      const results = await exa.searchAndContents(query, {
-        numResults: 5,
-        text: { maxCharacters: 500 },
+      const apiKey = process.env.EXA_API_KEY;
+      if (!apiKey) return "Search unavailable (EXA_API_KEY not set).";
+
+      const res = await fetch("https://api.exa.ai/search", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          numResults: 5,
+          text: { maxCharacters: 500 },
+        }),
       });
-      if (!results.results?.length) return "No results found.";
-      return results.results
+
+      if (!res.ok) return `Search failed (${res.status}). Respond based on your existing knowledge.`;
+
+      const data = await res.json();
+      if (!data.results?.length) return "No results found.";
+
+      return data.results
         .map(
           (r: { title?: string; url: string; text?: string }) =>
             `${r.title ?? "Untitled"} — ${r.url}\n${r.text ?? ""}\n---`

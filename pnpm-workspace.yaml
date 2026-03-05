@@ -32,11 +32,9 @@ catalog:
   zod: ^3.24.2
 
 onlyBuiltDependencies:
-  - '@prisma/engines'
   - bcrypt
   - canvas
   - core-js
   - esbuild
-  - prisma
   - protobufjs
   - sharp

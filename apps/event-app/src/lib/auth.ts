@@ -22,6 +22,7 @@ function assertAllowedDomain(email: string) {
 }
 
 export const auth = betterAuth({
+  baseURL: env.BETTER_AUTH_URL || env.NEXT_PUBLIC_APP_URL || "http://localhost:9001",
   secret: env.BETTER_AUTH_SECRET,
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days (in seconds)

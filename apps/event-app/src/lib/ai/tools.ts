@@ -36,7 +36,8 @@ export function createEventTools(eventId: string): Tool[] {
         .string()
         .describe("The keyword or phrase to search for in discussions"),
     }),
-    func: async ({ keyword }) => {
+    func: async (input) => {
+      const { keyword } = input as { keyword: string };
       const pattern = `%${keyword}%`;
       const parts: string[] = [];
 
@@ -142,7 +143,8 @@ export function createEventTools(eventId: string): Tool[] {
           "Search keyword to match against session title or description",
         ),
     }),
-    func: async ({ track, date, keyword }) => {
+    func: async (input) => {
+      const { track, date, keyword } = input as { track?: string; date?: string; keyword?: string };
       const conditions = [eq(eventSessions.eventId, eventId)];
 
       if (track) {
@@ -222,7 +224,8 @@ export function createEventTools(eventId: string): Tool[] {
     schema: z.object({
       name: z.string().describe("Speaker name (or partial name) to search"),
     }),
-    func: async ({ name }) => {
+    func: async (input) => {
+      const { name } = input as { name: string };
       const results = await db
         .select({
           id: speakers.id,
