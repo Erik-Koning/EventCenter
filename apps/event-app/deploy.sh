@@ -68,9 +68,11 @@ cd "$REPO_ROOT"
 
 if [ "$USE_PROD_ENV" = true ]; then
   echo "  Running: pnpm --filter event-app build:standalone:prod"
+  echo "  Env: ../../.env.production + STANDALONE=true"
   pnpm --filter event-app build:standalone:prod
 else
   echo "  Running: pnpm --filter event-app build:standalone"
+  echo "  Env: ../../.env + STANDALONE=true"
   pnpm --filter event-app build:standalone
 fi
 
