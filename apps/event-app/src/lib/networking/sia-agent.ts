@@ -59,10 +59,12 @@ export const webSearchTool = new DynamicStructuredTool({
   }),
   func: async ({ query }) => {
     try {
+      console.log(`[sia] web_search CALLED with query: "${query}"`);
       const baseUrl = getAzureBaseUrl();
       const apiKey = getRequiredEnv("AZURE_OPENAI_API_KEY");
       const model = getDeploymentNameMini();
 
+      console.log(`[sia] web_search → POST ${baseUrl}/openai/v1/responses (model: ${model})`);
       const res = await fetch(
         `${baseUrl}/openai/v1/responses`,
         {
@@ -86,6 +88,7 @@ export const webSearchTool = new DynamicStructuredTool({
       }
 
       const data = await res.json();
+      console.log(`[sia] web_search response output types:`, data.output?.map((o: { type: string }) => o.type));
 
       // Extract the text output from the responses API format
       const outputMessage = data.output?.find(
@@ -93,6 +96,7 @@ export const webSearchTool = new DynamicStructuredTool({
       );
       const text = outputMessage?.content?.[0]?.text;
 
+      console.log(`[sia] web_search result (first 200 chars):`, text?.slice(0, 200) ?? "NO TEXT");
       if (!text) return "No results found.";
       return text;
     } catch (error) {

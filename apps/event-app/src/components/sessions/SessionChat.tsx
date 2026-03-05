@@ -86,9 +86,9 @@ export function SessionChat({ sessionId }: SessionChatProps) {
   );
 
   return (
-    <div className="mt-8 w-full">
+    <div className="mt-8 flex w-full items-end" style={{ height: MAX_HEIGHT }}>
       <div
-        className="relative flex flex-col overflow-hidden rounded-xl border bg-background"
+        className="relative flex w-full flex-col overflow-hidden rounded-xl border bg-background"
         style={{ height }}
       >
         {/* Top resize handle */}

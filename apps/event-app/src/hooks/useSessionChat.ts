@@ -20,11 +20,15 @@ export function useSessionChat(sessionId: string) {
 
   const latestTimestampRef = useRef<string | null>(null);
   const initialLoadDoneRef = useRef(false);
+  // Track real IDs of messages we sent, so WS dedup works even before POST response replaces temp ID
+  const sentIdsRef = useRef<Set<string>>(new Set());
 
   const appendMessages = useCallback((newMsgs: SessionChatMessage[]) => {
     setMessages((prev) => {
       const existingIds = new Set(prev.map((m) => m.id));
-      const unique = newMsgs.filter((m) => !existingIds.has(m.id));
+      const unique = newMsgs.filter(
+        (m) => !existingIds.has(m.id) && !sentIdsRef.current.has(m.id)
+      );
       if (unique.length === 0) return prev;
       return [...prev, ...unique];
     });
@@ -169,13 +173,22 @@ export function useSessionChat(sessionId: string) {
         });
         if (res.ok) {
           const msg: SessionChatMessage = await res.json();
-          // Replace optimistic with real message
-          setMessages((prev) =>
-            prev.map((m) => (m.id === tempId ? msg : m))
-          );
+          // Track the real ID so WS dedup catches it
+          sentIdsRef.current.add(msg.id);
+          // Replace optimistic with real message (or drop temp if WS already delivered it)
+          setMessages((prev) => {
+            const wsAlreadyDelivered = prev.some((m) => m.id === msg.id);
+            if (wsAlreadyDelivered) {
+              // WS beat us — just remove the temp
+              return prev.filter((m) => m.id !== tempId);
+            }
+            return prev.map((m) => (m.id === tempId ? msg : m));
+          });
           if (msg.createdAt) {
             latestTimestampRef.current = msg.createdAt;
           }
+          // Clean up after a short delay (WS event should have arrived by then)
+          setTimeout(() => sentIdsRef.current.delete(msg.id), 5_000);
         } else {
           // Remove optimistic on failure
           setMessages((prev) => prev.filter((m) => m.id !== tempId));
