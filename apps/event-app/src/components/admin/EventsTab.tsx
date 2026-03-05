@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@common/components/ui/dialog";
 import { Badge } from "@common/components/ui/badge";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Sparkles } from "lucide-react";
 
 interface Event {
   id: string;
@@ -37,6 +37,7 @@ export function EventsTab() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [editing, setEditing] = useState<Event | null>(null);
   const [form, setForm] = useState(emptyForm);
 
@@ -82,6 +83,16 @@ export function EventsTab() {
     }
   };
 
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      const res = await fetch("/api/admin/seed", { method: "POST" });
+      if (res.ok) fetchEvents();
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this event?")) return;
     const res = await fetch(`/api/admin/events/${id}`, { method: "DELETE" });
@@ -90,7 +101,11 @@ export function EventsTab() {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex justify-end gap-2">
+        <Button onClick={handleSeed} size="sm" variant="outline" disabled={seeding}>
+          <Sparkles className="mr-1 h-4 w-4" />
+          {seeding ? "Seeding..." : "Seed Example Event"}
+        </Button>
         <Button onClick={openCreate} size="sm">
           <Plus className="mr-1 h-4 w-4" /> Add Event
         </Button>

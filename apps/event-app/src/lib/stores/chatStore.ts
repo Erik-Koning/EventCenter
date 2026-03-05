@@ -63,7 +63,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .slice(-20)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: content, history }),

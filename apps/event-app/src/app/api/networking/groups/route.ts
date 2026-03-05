@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   networkingGroups,
@@ -14,16 +14,24 @@ import { createId } from "@/lib/utils";
 const createGroupSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(1000).optional(),
+  eventId: z.string().max(255).optional(),
 });
 
 /**
- * GET /api/networking/groups - List all groups with creator name
+ * GET /api/networking/groups - List groups (optionally filtered by eventId)
  */
-export async function GET() {
+export async function GET(request: Request) {
   const authResult = await requireAuth();
   if (!authResult.success) return authResult.response;
 
   try {
+    const { searchParams } = new URL(request.url);
+    const eventId = searchParams.get("eventId");
+
+    const conditions = eventId
+      ? and(eq(networkingGroups.eventId, eventId))
+      : undefined;
+
     const groups = await db
       .select({
         id: networkingGroups.id,
@@ -38,6 +46,7 @@ export async function GET() {
       })
       .from(networkingGroups)
       .leftJoin(users, eq(networkingGroups.creatorId, users.id))
+      .where(conditions)
       .orderBy(desc(networkingGroups.createdAt));
 
     return NextResponse.json(groups);
@@ -68,6 +77,7 @@ export async function POST(request: Request) {
         name: validated.name,
         description: validated.description ?? null,
         creatorId: user.id,
+        eventId: validated.eventId ?? null,
         memberCount: 1,
       })
       .returning();

@@ -5,6 +5,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNetworkingStore } from "@/lib/stores/networkingStore";
+import { useEventStore } from "@/lib/stores/eventStore";
 
 export function CreateGroupDialog() {
   const [open, setOpen] = useState(false);
@@ -13,6 +14,7 @@ export function CreateGroupDialog() {
   const [loading, setLoading] = useState(false);
 
   const addGroup = useNetworkingStore((s) => s.addGroup);
+  const currentEvent = useEventStore((s) => s.currentEvent);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,6 +28,7 @@ export function CreateGroupDialog() {
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || undefined,
+          eventId: currentEvent?.id,
         }),
       });
 

@@ -14,6 +14,7 @@ import {
   LogOut,
   Shield,
   ChevronDown,
+  CalendarX2,
 } from "lucide-react";
 import LogoutButton from "@/components/auth/logout-button";
 import { authClient } from "@/lib/auth-client";
@@ -184,7 +185,7 @@ export function Sidebar() {
         {/* Footer */}
         <div className="border-t border-border px-4 py-3">
           {/* Event selector */}
-          {currentEvent && (
+          {currentEvent ? (
             <div className="relative mb-3">
               {hasMultipleEvents ? (
                 <>
@@ -236,6 +237,13 @@ export function Sidebar() {
                   </p>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="mb-3 flex items-center gap-2 rounded-lg bg-muted/50 px-2 py-2">
+              <CalendarX2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <p className="text-[11px] text-muted-foreground">
+                No active event
+              </p>
             </div>
           )}
 

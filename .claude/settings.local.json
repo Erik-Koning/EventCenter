@@ -4,7 +4,9 @@
       "Bash(ls:*)",
       "Bash(pnpm install:*)",
       "Bash(git mv:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(python3:*)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm:*)"
     ]
   }
 }

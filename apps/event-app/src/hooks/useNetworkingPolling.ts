@@ -5,12 +5,14 @@ import {
   type NetworkingMessage,
   type MindMapNode,
 } from "@/lib/stores/networkingStore";
+import { useEventStore } from "@/lib/stores/eventStore";
 
 const GROUPS_POLL_MS = 30_000;
 const MESSAGES_POLL_MS = 3_000;
 const MINDMAP_POLL_MS = 5_000;
 
 export function useNetworkingPolling() {
+  const currentEvent = useEventStore((s) => s.currentEvent);
   const selectedGroupId = useNetworkingStore((s) => s.selectedGroupId);
   const isMember = useNetworkingStore((s) => s.isMember);
   const setGroups = useNetworkingStore((s) => s.setGroups);
@@ -39,7 +41,8 @@ export function useNetworkingPolling() {
     async function fetchGroups() {
       try {
         setGroupsLoading(true);
-        const res = await fetch("/api/networking/groups");
+        const params = currentEvent?.id ? `?eventId=${currentEvent.id}` : "";
+        const res = await fetch(`/api/networking/groups${params}`);
         if (res.ok && active) {
           const data = await res.json();
           setGroups(data);
@@ -57,7 +60,7 @@ export function useNetworkingPolling() {
       active = false;
       clearInterval(interval);
     };
-  }, [setGroups, setGroupsLoading]);
+  }, [setGroups, setGroupsLoading, currentEvent?.id]);
 
   // Reset state when group changes
   useEffect(() => {

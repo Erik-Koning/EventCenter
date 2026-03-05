@@ -14,6 +14,7 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
+import { events } from "./events";
 
 // ============================================
 // NETWORKING GROUPS
@@ -28,6 +29,9 @@ export const networkingGroups = pgTable(
     creatorId: varchar("creator_id", { length: 255 })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    eventId: varchar("event_id", { length: 255 }).references(() => events.id, {
+      onDelete: "cascade",
+    }),
     topWords: jsonb("top_words").$type<string[]>().default([]),
     insights: jsonb("insights").$type<string[]>().default([]),
     memberCount: integer("member_count").default(0).notNull(),
@@ -35,6 +39,7 @@ export const networkingGroups = pgTable(
   },
   (table) => [
     index("networking_groups_creator_id_idx").on(table.creatorId),
+    index("networking_groups_event_id_idx").on(table.eventId),
     index("networking_groups_created_at_idx").on(table.createdAt),
   ]
 );

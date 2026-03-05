@@ -131,6 +131,10 @@ export const networkingGroupsRelations = relations(networkingGroups, ({ one, man
     fields: [networkingGroups.creatorId],
     references: [users.id],
   }),
+  event: one(events, {
+    fields: [networkingGroups.eventId],
+    references: [events.id],
+  }),
   members: many(networkingGroupMembers),
   messages: many(networkingMessages),
   mindMapNodes: many(networkingMindMapNodes),
@@ -265,6 +269,7 @@ export const attendeesRelations = relations(attendees, ({ one, many }) => ({
 export const eventsRelations = relations(events, ({ many }) => ({
   sessions: many(eventSessions),
   eventAttendees: many(eventAttendees),
+  networkingGroups: many(networkingGroups),
 }));
 
 export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({

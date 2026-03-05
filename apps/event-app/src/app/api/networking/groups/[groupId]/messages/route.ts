@@ -11,7 +11,7 @@ import { requireAuth } from "@/lib/authorization";
 import { handleApiError, commonErrors } from "@/lib/api-error";
 import { createId } from "@/lib/utils";
 import { broadcastToGroup } from "@/lib/pubsub";
-import { generateInsights } from "@/lib/networking/generate-insights";
+import { onMessageCreated } from "@/lib/networking/on-message-hooks";
 
 const sendMessageSchema = z.object({
   content: z.string().min(1).max(5000),
@@ -100,7 +100,7 @@ export async function POST(
       data: { ...message, userName: user.name },
     });
 
-    // Trigger insight generation every 5 non-AI messages (fire-and-forget)
+    // Trigger hooks (Sia agent + insights) — fire-and-forget
     const [{ value: msgCount }] = await db
       .select({ value: count() })
       .from(networkingMessages)
@@ -110,11 +110,7 @@ export async function POST(
           eq(networkingMessages.isAiSummary, false)
         )
       );
-    if (msgCount % 5 === 0) {
-      generateInsights(groupId).catch((err) =>
-        console.error("[messages:POST] generateInsights error:", err)
-      );
-    }
+    onMessageCreated(groupId, validated.content, msgCount);
 
     return NextResponse.json(
       { ...message, userName: user.name },
