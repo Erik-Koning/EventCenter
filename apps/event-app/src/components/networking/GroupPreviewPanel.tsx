@@ -107,25 +107,34 @@ export function GroupPreviewPanel() {
     return () => { active = false; };
   }, [previewGroupId]);
 
-  // Fetch last messages if member
+  // Fetch and poll messages if member (picks up Sia responses)
   useEffect(() => {
     if (!previewGroupId || !previewIsMember) return;
     let active = true;
-    fetch(`/api/networking/groups/${previewGroupId}/messages`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: NetworkingMessage[]) => {
-        if (active) {
-          setPreviewMessages(data.slice(-5));
-          // Scroll to bottom
-          requestAnimationFrame(() => {
-            if (scrollRef.current) {
-              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            }
+
+    function fetchMessages() {
+      fetch(`/api/networking/groups/${previewGroupId}/messages`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data: NetworkingMessage[]) => {
+          if (!active) return;
+          setPreviewMessages((prev) => {
+            const latest = data.slice(-5);
+            // Only update if messages actually changed
+            if (prev.length === latest.length && prev.at(-1)?.id === latest.at(-1)?.id) return prev;
+            requestAnimationFrame(() => {
+              if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              }
+            });
+            return latest;
           });
-        }
-      })
-      .catch(() => {});
-    return () => { active = false; };
+        })
+        .catch(() => {});
+    }
+
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000);
+    return () => { active = false; clearInterval(interval); };
   }, [previewGroupId, previewIsMember]);
 
   async function handleJoin() {

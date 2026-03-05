@@ -109,9 +109,9 @@ const webSearchTool = new DynamicStructuredTool({
 const postMessageToGroupTool = new DynamicStructuredTool({
   name: "post_message_to_group",
   description:
-    "Post a message to a networking group as Sia. Use this when asked to send or add a message to a specific group.",
+    "Post a message to a networking group as Sia. Use this when asked to send, add, or post a message to a specific group. The groupName is fuzzy-matched against existing groups — an approximate name is fine.",
   schema: z.object({
-    groupName: z.string().describe("The name of the target group (fuzzy match)"),
+    groupName: z.string().describe("The approximate name of the target group"),
     message: z.string().describe("The message content to post"),
   }),
   func: async ({ groupName, message }) => {
@@ -124,7 +124,7 @@ const postMessageToGroupTool = new DynamicStructuredTool({
 
       const needle = groupName.toLowerCase();
 
-      // Exact case-insensitive match first, then substring
+      // Exact case-insensitive match first, then substring, then word overlap
       let match = allGroups.find(
         (g) => g.name.toLowerCase() === needle
       );
@@ -137,6 +137,20 @@ const postMessageToGroupTool = new DynamicStructuredTool({
         match = allGroups.find((g) =>
           needle.includes(g.name.toLowerCase())
         );
+      }
+      if (!match) {
+        // Word overlap scoring
+        const needleWords = new Set(needle.split(/\s+/));
+        let bestScore = 0;
+        for (const g of allGroups) {
+          const gWords = new Set(g.name.toLowerCase().split(/\s+/));
+          const overlap = [...needleWords].filter((w) => gWords.has(w)).length;
+          if (overlap > bestScore) {
+            bestScore = overlap;
+            match = g;
+          }
+        }
+        if (bestScore === 0) match = undefined;
       }
 
       if (!match) {
@@ -175,11 +189,35 @@ const postMessageToGroupTool = new DynamicStructuredTool({
 // Tool: create_networking_group (factory — needs invoking user context)
 // ---------------------------------------------------------------------------
 
+/** Check if any existing group name is very similar to the proposed name */
+function findSimilarGroup(
+  proposedName: string,
+  existing: { id: string; name: string }[]
+): { id: string; name: string } | null {
+  const proposed = proposedName.toLowerCase().trim();
+
+  for (const g of existing) {
+    const name = g.name.toLowerCase();
+    // Exact match
+    if (name === proposed) return g;
+    // One contains the other
+    if (name.includes(proposed) || proposed.includes(name)) return g;
+    // Word overlap — if most words match, consider it similar
+    const proposedWords = new Set(proposed.split(/\s+/));
+    const nameWords = new Set(name.split(/\s+/));
+    const overlap = [...proposedWords].filter((w) => nameWords.has(w)).length;
+    const minSize = Math.min(proposedWords.size, nameWords.size);
+    if (minSize > 0 && overlap / minSize >= 0.7) return g;
+  }
+
+  return null;
+}
+
 function makeCreateNetworkingGroupTool(ctx: { invokingUserId: string; eventId: string | null }) {
   return new DynamicStructuredTool({
     name: "create_networking_group",
     description:
-      "Create a new networking group. Use this when someone asks to create a group about a topic. The invoking user becomes the creator and Sia is added as a co-creator. Optionally post an opening message with relevant context.",
+      "Create a new networking group. Use this when someone asks to create a group about a topic. The invoking user becomes the creator and Sia is added as a co-creator. Optionally post an opening message with relevant context. If a very similar group already exists, this tool will NOT create a duplicate — it will return the similar group's name so you can suggest posting there instead.",
     schema: z.object({
       name: z.string().max(255).describe("Short group name (2-5 words)"),
       description: z.string().max(1000).optional().describe("A 1-2 sentence description of the group topic"),
@@ -188,6 +226,16 @@ function makeCreateNetworkingGroupTool(ctx: { invokingUserId: string; eventId: s
     func: async ({ name, description, openingMessage }) => {
       try {
         await ensureSiaUser();
+
+        // Check for similar existing groups
+        const allGroups = await db
+          .select({ id: networkingGroups.id, name: networkingGroups.name })
+          .from(networkingGroups);
+
+        const similar = findSimilarGroup(name, allGroups);
+        if (similar) {
+          return `A similar group already exists: "${similar.name}". Would you like me to post a message there instead? Use: @sia add message to ${similar.name} [your message]`;
+        }
 
         const groupId = createId();
 
