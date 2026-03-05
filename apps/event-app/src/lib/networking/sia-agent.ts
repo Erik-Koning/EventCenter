@@ -106,84 +106,89 @@ const webSearchTool = new DynamicStructuredTool({
 // Tool: post_message_to_group
 // ---------------------------------------------------------------------------
 
-const postMessageToGroupTool = new DynamicStructuredTool({
-  name: "post_message_to_group",
-  description:
-    "Post a message to a networking group as Sia. Use this when asked to send, add, or post a message to a specific group. The groupName is fuzzy-matched against existing groups — an approximate name is fine.",
-  schema: z.object({
-    groupName: z.string().describe("The approximate name of the target group"),
-    message: z.string().describe("The message content to post"),
-  }),
-  func: async ({ groupName, message }) => {
-    try {
-      const allGroups = await db
-        .select({ id: networkingGroups.id, name: networkingGroups.name })
-        .from(networkingGroups);
+function makePostMessageToGroupTool(senderName: string) {
+  return new DynamicStructuredTool({
+    name: "post_message_to_group",
+    description:
+      "Post a message to a networking group as Sia. Use this when asked to send, add, or post a message to a specific group. The groupName is fuzzy-matched against existing groups — an approximate name is fine.",
+    schema: z.object({
+      groupName: z.string().describe("The approximate name of the target group"),
+      message: z.string().describe("The message content to post (do NOT include a sender signature — it is added automatically)"),
+    }),
+    func: async ({ groupName, message }) => {
+      try {
+        const allGroups = await db
+          .select({ id: networkingGroups.id, name: networkingGroups.name })
+          .from(networkingGroups);
 
-      if (allGroups.length === 0) return "No groups exist yet.";
+        if (allGroups.length === 0) return "No groups exist yet.";
 
-      const needle = groupName.toLowerCase();
+        const needle = groupName.toLowerCase();
 
-      // Exact case-insensitive match first, then substring, then word overlap
-      let match = allGroups.find(
-        (g) => g.name.toLowerCase() === needle
-      );
-      if (!match) {
-        match = allGroups.find((g) =>
-          g.name.toLowerCase().includes(needle)
+        // Exact case-insensitive match first, then substring, then word overlap
+        let match = allGroups.find(
+          (g) => g.name.toLowerCase() === needle
         );
-      }
-      if (!match) {
-        match = allGroups.find((g) =>
-          needle.includes(g.name.toLowerCase())
-        );
-      }
-      if (!match) {
-        // Word overlap scoring
-        const needleWords = new Set(needle.split(/\s+/));
-        let bestScore = 0;
-        for (const g of allGroups) {
-          const gWords = new Set(g.name.toLowerCase().split(/\s+/));
-          const overlap = [...needleWords].filter((w) => gWords.has(w)).length;
-          if (overlap > bestScore) {
-            bestScore = overlap;
-            match = g;
-          }
+        if (!match) {
+          match = allGroups.find((g) =>
+            g.name.toLowerCase().includes(needle)
+          );
         }
-        if (bestScore === 0) match = undefined;
+        if (!match) {
+          match = allGroups.find((g) =>
+            needle.includes(g.name.toLowerCase())
+          );
+        }
+        if (!match) {
+          // Word overlap scoring
+          const needleWords = new Set(needle.split(/\s+/));
+          let bestScore = 0;
+          for (const g of allGroups) {
+            const gWords = new Set(g.name.toLowerCase().split(/\s+/));
+            const overlap = [...needleWords].filter((w) => gWords.has(w)).length;
+            if (overlap > bestScore) {
+              bestScore = overlap;
+              match = g;
+            }
+          }
+          if (bestScore === 0) match = undefined;
+        }
+
+        if (!match) {
+          const names = allGroups.map((g) => g.name).join(", ");
+          return `Group "${groupName}" not found. Available groups: ${names}`;
+        }
+
+        await ensureSiaUser();
+
+        // Append sender attribution
+        const content = `${message}\n\n— ${senderName}`;
+
+        const messageId = createId();
+        const [siaMessage] = await db
+          .insert(networkingMessages)
+          .values({
+            id: messageId,
+            groupId: match.id,
+            userId: SIA_USER_ID,
+            content,
+            isAiSummary: true,
+          })
+          .returning();
+
+        await broadcastToGroup(match.id, {
+          type: "message:new",
+          data: { ...siaMessage, userName: "Sia" },
+        });
+
+        return `Message posted to "${match.name}" successfully.`;
+      } catch (error) {
+        console.error("[sia] post_message_to_group error:", error);
+        return "Failed to post message. Please try again.";
       }
-
-      if (!match) {
-        const names = allGroups.map((g) => g.name).join(", ");
-        return `Group "${groupName}" not found. Available groups: ${names}`;
-      }
-
-      await ensureSiaUser();
-
-      const messageId = createId();
-      const [siaMessage] = await db
-        .insert(networkingMessages)
-        .values({
-          id: messageId,
-          groupId: match.id,
-          userId: SIA_USER_ID,
-          content: message,
-          isAiSummary: true,
-        })
-        .returning();
-
-      await broadcastToGroup(match.id, {
-        type: "message:new",
-        data: { ...siaMessage, userName: "Sia" },
-      });
-
-      return `Message posted to "${match.name}" successfully.`;
-    } catch (error) {
-      console.error("[sia] post_message_to_group error:", error);
-      return "Failed to post message. Please try again.";
-    }
-  },
-});
+    },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Tool: create_networking_group (factory — needs invoking user context)
@@ -343,7 +348,7 @@ ${mentionInstructions}
 // runSiaAgent — triggered from networking group chat context
 // ---------------------------------------------------------------------------
 
-export async function runSiaAgent(groupId: string, invokingUserId: string): Promise<void> {
+export async function runSiaAgent(groupId: string, invokingUserId: string, invokingUserName: string): Promise<void> {
   try {
     await ensureSiaUser();
 
@@ -389,9 +394,11 @@ export async function runSiaAgent(groupId: string, invokingUserId: string): Prom
       eventId: group?.eventId ?? null,
     });
 
+    const postTool = makePostMessageToGroupTool(invokingUserName);
+
     const agent = createReactAgent({
       llm: getModelMini(),
-      tools: [webSearchTool, postMessageToGroupTool, createGroupTool],
+      tools: [webSearchTool, postTool, createGroupTool],
       prompt: systemPrompt,
     });
 
@@ -439,31 +446,51 @@ export async function runSiaAgent(groupId: string, invokingUserId: string): Prom
 export async function runSiaCommand(
   rawMessage: string,
   invokingUserId: string,
-  eventId: string | null
+  invokingUserName: string,
+  eventId: string | null,
+  chatHistory: { role: "user" | "assistant"; content: string }[] = []
 ): Promise<{ content: string }> {
   // Strip @sia prefix
   const stripped = rawMessage.replace(/@sia\s*/i, "").trim();
 
-  const systemPrompt = `You are Sia, a friendly AI assistant.
+  const systemPrompt = `You are Sia, a friendly AI assistant with access to networking group tools.
 
-Determine the intent of the user's message and act accordingly:
-- "create a group" / "create networking group" → use create_networking_group tool (short name, brief description, opening message with context)
-- "research" or a factual question → use web_search tool, give a concise cited answer
-- "add message to [group]" → use post_message_to_group tool
-- Casual/conversational → reply in 1-2 short sentences like a colleague, no tools needed
+You have full conversation history below. Use it to understand context.
 
-Keep all responses concise. Short messages get short replies.`;
+RULES — YOU MUST FOLLOW THESE:
+1. You can ONLY affect the real world through tool calls. If you did not call a tool, the action DID NOT happen.
+2. NEVER claim you posted, sent, or created something unless the tool was called AND returned a success message in this turn.
+3. When the user says "send it", "yes", "do it", "post this" — look at the conversation history, extract the group name and message content, and CALL the post_message_to_group tool. Do not just say you did it.
 
+TOOLS:
+- post_message_to_group(groupName, message) → post a message to a networking group. You MUST call this to send anything.
+- create_networking_group(name, description, openingMessage) → create a new group
+- web_search(query) → research a topic
+
+For casual conversation with no action needed, reply in 1-2 short sentences.
+Keep all responses concise.`;
+
+  const postTool = makePostMessageToGroupTool(invokingUserName);
   const createGroupTool = makeCreateNetworkingGroupTool({ invokingUserId, eventId });
 
   const agent = createReactAgent({
     llm: getModelMini(),
-    tools: [webSearchTool, postMessageToGroupTool, createGroupTool],
+    tools: [webSearchTool, postTool, createGroupTool],
     prompt: systemPrompt,
   });
 
+  // Build message history for the agent
+  const agentMessages: { role: "user" | "assistant"; content: string }[] = [];
+  for (const msg of chatHistory) {
+    agentMessages.push({
+      role: msg.role,
+      content: msg.content.replace(/@sia\s*/i, "").trim(),
+    });
+  }
+  agentMessages.push({ role: "user", content: stripped || rawMessage });
+
   const result = await agent.invoke({
-    messages: [{ role: "user", content: stripped || rawMessage }],
+    messages: agentMessages,
   });
 
   const lastMessage = result.messages[result.messages.length - 1];

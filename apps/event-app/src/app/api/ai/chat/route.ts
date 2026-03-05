@@ -33,9 +33,15 @@ export async function POST(request: Request) {
 
     const eventId = attendee?.eventAttendees?.[0]?.eventId;
 
-    // Route @sia commands to the Sia agent
-    if (/@sia\b/i.test(message)) {
-      const result = await runSiaCommand(message, user.id, eventId ?? null);
+    // Route @sia commands (and follow-ups in a @sia conversation) to the Sia agent
+    const hasSiaMention = /@sia\b/i.test(message);
+    const recentSiaConversation = !hasSiaMention && history?.some((m) => /@sia\b/i.test(m.content));
+    if (hasSiaMention || recentSiaConversation) {
+      const siaHistory = (history ?? []).slice(-10).map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+      const result = await runSiaCommand(message, user.id, user.name, eventId ?? null, siaHistory);
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         start(controller) {

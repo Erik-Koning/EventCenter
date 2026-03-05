@@ -110,7 +110,7 @@ export async function POST(
           eq(networkingMessages.isAiSummary, false)
         )
       );
-    onMessageCreated(groupId, validated.content, msgCount, user.id);
+    onMessageCreated(groupId, validated.content, msgCount, user.id, user.name);
 
     return NextResponse.json(
       { ...message, userName: user.name },

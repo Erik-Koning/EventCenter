@@ -5,13 +5,14 @@ export function onMessageCreated(
   groupId: string,
   messageContent: string,
   nonAiCount: number,
-  userId: string
+  userId: string,
+  userName: string
 ): void {
   const hasSiaMention = /@sia\b/i.test(messageContent);
   const isFifthMessage = nonAiCount % 5 === 0;
 
   if (hasSiaMention || isFifthMessage) {
-    runSiaAgent(groupId, userId).catch((err) =>
+    runSiaAgent(groupId, userId, userName).catch((err) =>
       console.error("[onMessageCreated] sia error:", err)
     );
   }
