@@ -20,7 +20,7 @@ export async function GET(
       with: {
         sessionSpeakers: {
           with: {
-            speaker: true,
+            user: true,
           },
           orderBy: (ss, { asc }) => [asc(ss.displayOrder)],
         },
@@ -40,7 +40,7 @@ export async function GET(
       location: s.location,
       track: s.track,
       tags: s.tags,
-      speakers: s.sessionSpeakers.map((ss) => ss.speaker),
+      speakers: s.sessionSpeakers.map((ss) => ss.user),
     }));
 
     return NextResponse.json(result);

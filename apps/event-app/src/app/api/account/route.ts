@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { attendees } from "@/db/schema";
+import { users } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
-import { handleApiError, commonErrors } from "@/lib/api-error";
+import { handleApiError } from "@/lib/api-error";
 
 /**
- * GET /api/account - Get current user's attendee profile (title, interests)
+ * GET /api/account - Get current user's profile (title, interests, company)
  */
 export async function GET() {
   const authResult = await requireAuth();
@@ -15,8 +15,8 @@ export async function GET() {
   const { user } = authResult;
 
   try {
-    const attendee = await db.query.attendees.findFirst({
-      where: eq(attendees.userId, user.id),
+    const row = await db.query.users.findFirst({
+      where: eq(users.id, user.id),
       columns: {
         title: true,
         interests: true,
@@ -24,7 +24,7 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(attendee ?? { title: null, interests: null, company: null });
+    return NextResponse.json(row ?? { title: null, interests: null, company: null });
   } catch (error) {
     return handleApiError(error, "account:GET");
   }
@@ -37,7 +37,7 @@ const updateSchema = z.object({
 });
 
 /**
- * PATCH /api/account - Update current user's attendee profile
+ * PATCH /api/account - Update current user's profile
  */
 export async function PATCH(request: Request) {
   const authResult = await requireAuth();
@@ -48,20 +48,14 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const validated = updateSchema.parse(body);
 
-    const attendee = await db.query.attendees.findFirst({
-      where: eq(attendees.userId, user.id),
-    });
-
-    if (!attendee) return commonErrors.notFound("Attendee profile");
-
     const [updated] = await db
-      .update(attendees)
+      .update(users)
       .set({ ...validated, updatedAt: new Date() })
-      .where(eq(attendees.id, attendee.id))
+      .where(eq(users.id, user.id))
       .returning({
-        title: attendees.title,
-        interests: attendees.interests,
-        company: attendees.company,
+        title: users.title,
+        interests: users.interests,
+        company: users.company,
       });
 
     return NextResponse.json(updated);

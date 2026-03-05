@@ -21,10 +21,17 @@ export const users = pgTable(
   "users",
   {
     id: varchar("id", { length: 255 }).primaryKey(),
-    email: varchar("email", { length: 255 }).notNull().unique(),
+    email: varchar("email", { length: 255 }).unique(),
     name: varchar("name", { length: 255 }).notNull(),
     emailVerified: boolean("emailVerified").notNull(),
     image: text("image"),
+    title: varchar("title", { length: 255 }),
+    company: varchar("company", { length: 255 }),
+    bio: text("bio"),
+    imageUrl: text("image_url"),
+    initials: varchar("initials", { length: 10 }),
+    interests: text("interests"),
+    isSpeaker: boolean("is_speaker").default(false).notNull(),
     createdAt: timestamp("createdAt").notNull(),
     updatedAt: timestamp("updatedAt").notNull(),
 

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { speakers } from "@/db/schema";
+import { users } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 import { createId } from "@/lib/utils";
@@ -14,7 +14,6 @@ const createSpeakerSchema = z.object({
   bio: z.string().min(1),
   imageUrl: z.string().optional(),
   initials: z.string().min(1).max(10),
-  userId: z.string().optional(),
 });
 
 export async function GET() {
@@ -24,8 +23,9 @@ export async function GET() {
   try {
     const allSpeakers = await db
       .select()
-      .from(speakers)
-      .orderBy(desc(speakers.createdAt));
+      .from(users)
+      .where(eq(users.isSpeaker, true))
+      .orderBy(desc(users.createdAt));
 
     return NextResponse.json(allSpeakers);
   } catch (error) {
@@ -41,8 +41,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = createSpeakerSchema.parse(body);
 
+    const now = new Date();
     const [speaker] = await db
-      .insert(speakers)
+      .insert(users)
       .values({
         id: createId(),
         name: validated.name,
@@ -51,7 +52,10 @@ export async function POST(request: Request) {
         bio: validated.bio,
         imageUrl: validated.imageUrl ?? "",
         initials: validated.initials,
-        userId: validated.userId ?? null,
+        isSpeaker: true,
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
       })
       .returning();
 

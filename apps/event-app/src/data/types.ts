@@ -29,6 +29,7 @@ export interface Attendee {
   title: string | null;
   imageUrl: string | null;
   initials: string | null;
+  isSpeaker: boolean;
 }
 
 export interface EventInfo {

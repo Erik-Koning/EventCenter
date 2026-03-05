@@ -9,7 +9,7 @@ import {
   eventSessions,
   sessionSpeakers,
   sessionUpvotes,
-  speakers,
+  users,
 } from "@/db/schema";
 import { searchDiscussions } from "@/lib/chat/search-discussions";
 
@@ -184,12 +184,12 @@ export function createEventTools(eventId: string): Tool[] {
       for (const s of results) {
         const speakerRows = await db
           .select({
-            name: speakers.name,
-            title: speakers.title,
-            company: speakers.company,
+            name: users.name,
+            title: users.title,
+            company: users.company,
           })
           .from(sessionSpeakers)
-          .innerJoin(speakers, eq(sessionSpeakers.speakerId, speakers.id))
+          .innerJoin(users, eq(sessionSpeakers.userId, users.id))
           .where(eq(sessionSpeakers.sessionId, s.id));
 
         const [upvoteRow] = await db
@@ -228,14 +228,14 @@ export function createEventTools(eventId: string): Tool[] {
       const { name } = input as { name: string };
       const results = await db
         .select({
-          id: speakers.id,
-          name: speakers.name,
-          title: speakers.title,
-          company: speakers.company,
-          bio: speakers.bio,
+          id: users.id,
+          name: users.name,
+          title: users.title,
+          company: users.company,
+          bio: users.bio,
         })
-        .from(speakers)
-        .where(ilike(speakers.name, `%${name}%`))
+        .from(users)
+        .where(and(eq(users.isSpeaker, true), ilike(users.name, `%${name}%`)))
         .limit(5);
 
       if (results.length === 0) {
@@ -248,7 +248,7 @@ export function createEventTools(eventId: string): Tool[] {
         parts.push(`Speaker: ${speaker.name}`);
         parts.push(`Title: ${speaker.title}`);
         if (speaker.company) parts.push(`Company: ${speaker.company}`);
-        parts.push(`Bio: ${speaker.bio}`);
+        if (speaker.bio) parts.push(`Bio: ${speaker.bio}`);
 
         const speakerSessions = await db
           .select({
@@ -265,7 +265,7 @@ export function createEventTools(eventId: string): Tool[] {
           )
           .where(
             and(
-              eq(sessionSpeakers.speakerId, speaker.id),
+              eq(sessionSpeakers.userId, speaker.id),
               eq(eventSessions.eventId, eventId),
             ),
           );

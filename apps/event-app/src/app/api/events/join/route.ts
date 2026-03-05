@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { users, events, eventAttendees, attendees } from "@/db/schema";
+import { users, events, eventAttendees } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -30,22 +30,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find attendee record for this user
-    const attendee = await db.query.attendees.findFirst({
-      where: eq(attendees.userId, user.id),
-    });
-    if (!attendee) {
-      return NextResponse.json(
-        { message: "You are not on the guestlist for this event", error: "FORBIDDEN" },
-        { status: 403 }
-      );
-    }
-
     // Check if on the guestlist (eventAttendees)
     const enrollment = await db.query.eventAttendees.findFirst({
       where: and(
         eq(eventAttendees.eventId, eventId),
-        eq(eventAttendees.attendeeId, attendee.id)
+        eq(eventAttendees.userId, user.id)
       ),
     });
     if (!enrollment) {

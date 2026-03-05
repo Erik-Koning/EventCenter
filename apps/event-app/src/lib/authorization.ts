@@ -208,7 +208,7 @@ export async function requireAuth(
 
     const user: AuthenticatedUser = {
       id: dbUser.id,
-      email: dbUser.email,
+      email: dbUser.email ?? "",
       name: dbUser.name,
       role: dbUser.role as Role,
       emailVerified: dbUser.emailVerified,

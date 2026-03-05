@@ -13,7 +13,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { DayRecapData } from "@/data/recap-types";
-import { attendees } from "./attendees";
+import { users } from "./auth";
 
 //==================================================
 // EVENTS TABLE
@@ -49,18 +49,18 @@ export const eventAttendees = pgTable(
     eventId: varchar("event_id", { length: 255 })
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
-    attendeeId: varchar("attendee_id", { length: 255 })
+    userId: varchar("user_id", { length: 255 })
       .notNull()
-      .references(() => attendees.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "cascade" }),
     role: varchar("role", { length: 50 }).default("user").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("event_attendees_event_attendee_idx").on(
+    uniqueIndex("event_attendees_event_user_idx").on(
       table.eventId,
-      table.attendeeId
+      table.userId
     ),
     index("event_attendees_event_id_idx").on(table.eventId),
-    index("event_attendees_attendee_id_idx").on(table.attendeeId),
+    index("event_attendees_user_id_idx").on(table.userId),
   ]
 );

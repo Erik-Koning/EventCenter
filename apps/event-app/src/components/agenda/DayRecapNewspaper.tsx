@@ -100,23 +100,25 @@ function LoadingSkeleton({ onClose }: { onClose: () => void }) {
 
 // ─── Full newspaper ───────────────────────────────────────────
 
-function NewspaperContent({
+export function NewspaperContent({
   recap,
   onClose,
 }: {
   recap: DayRecapData;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   return (
     <div className="rounded-2xl border border-border bg-[#faf8f4] shadow-2xl overflow-hidden">
       {/* ── Masthead ── */}
       <div className="relative border-b-2 border-foreground/80 px-6 pt-6 pb-4 text-center">
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute right-4 top-4 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
 
         <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-1">
           {recap.date}

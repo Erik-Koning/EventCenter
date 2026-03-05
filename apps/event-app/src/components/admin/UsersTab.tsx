@@ -36,7 +36,6 @@ interface Person {
   isSpeaker: boolean;
   company: string | null;
   bio: string | null;
-  userId: string | null;
   createdAt: string;
   userEmail: string | null;
   userRole: string | null;
@@ -106,20 +105,9 @@ export function UsersTab() {
     const url = editing ? `/api/admin/attendees/${editing.id}` : "/api/admin/attendees";
     const method = editing ? "PUT" : "POST";
     const { email, password, ...rest } = form;
-    let payload: Record<string, unknown>;
-    if (editing?.userId) {
-      // Already has an account — don't send email/password
-      payload = rest;
-    } else if (editing && !editing.userId && email) {
-      // Editing attendee without account — send email to find/create user
-      payload = setPasswordChecked && password
-        ? { ...rest, email, password }
-        : { ...rest, email };
-    } else if (!editing && email) {
-      // Creating new — include email, password if provided
+    let payload: Record<string, unknown> = rest;
+    if (!editing && email) {
       payload = password ? { ...rest, email, password } : { ...rest, email };
-    } else {
-      payload = rest;
     }
     const res = await fetch(url, {
       method,
@@ -148,9 +136,8 @@ export function UsersTab() {
   };
 
   const toggleRole = async (p: Person) => {
-    if (!p.userId) return;
     const newRole = p.userRole === "admin" ? "user" : "admin";
-    const res = await fetch(`/api/admin/users/${p.userId}`, {
+    const res = await fetch(`/api/admin/users/${p.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: newRole }),
@@ -159,8 +146,7 @@ export function UsersTab() {
   };
 
   const toggleBlocked = async (p: Person) => {
-    if (!p.userId) return;
-    const res = await fetch(`/api/admin/users/${p.userId}`, {
+    const res = await fetch(`/api/admin/users/${p.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ blocked: !p.userBlocked }),
@@ -176,8 +162,8 @@ export function UsersTab() {
   };
 
   const handleSetPassword = async () => {
-    if (!selectedPerson?.userId || !newPassword) return;
-    await fetch(`/api/admin/users/${selectedPerson.userId}/reset-password`, {
+    if (!selectedPerson || !newPassword) return;
+    await fetch(`/api/admin/users/${selectedPerson.id}/reset-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ newPassword }),
@@ -186,10 +172,10 @@ export function UsersTab() {
   };
 
   const handleSendResetEmail = async () => {
-    if (!selectedPerson?.userId) return;
+    if (!selectedPerson) return;
     setSendingResetEmail(true);
     try {
-      const res = await fetch(`/api/admin/users/${selectedPerson.userId}/send-reset-email`, {
+      const res = await fetch(`/api/admin/users/${selectedPerson.id}/send-reset-email`, {
         method: "POST",
       });
       if (res.ok) setResetEmailSent(true);
@@ -250,7 +236,7 @@ export function UsersTab() {
                   )}
                 </TableCell>
                 <TableCell>
-                  {p.userId ? (
+                  {p.userEmail ? (
                     p.userBlocked ? (
                       <Badge variant="destructive">Blocked</Badge>
                     ) : (
@@ -296,7 +282,7 @@ export function UsersTab() {
                         </>
                       )}
                     </button>
-                    {p.userId && (
+                    {p.userEmail && (
                       <>
                         <div className="mx-2 my-1 border-t border-border" />
                         <button
@@ -392,7 +378,7 @@ export function UsersTab() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="u-email">Email</Label>
-              {editing?.userId ? (
+              {editing?.userEmail ? (
                 <Input id="u-email" value={form.email} disabled className="bg-muted" />
               ) : (
                 <Input
@@ -415,35 +401,6 @@ export function UsersTab() {
                   placeholder="Min 8 characters"
                 />
               </div>
-            )}
-            {editing && !editing.userId && form.email && (
-              <>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="u-set-password"
-                    type="checkbox"
-                    checked={setPasswordChecked}
-                    onChange={(e) => {
-                      setSetPasswordChecked(e.target.checked);
-                      if (!e.target.checked) setForm({ ...form, password: "" });
-                    }}
-                    className="h-4 w-4 rounded border-border accent-primary"
-                  />
-                  <Label htmlFor="u-set-password" className="cursor-pointer">Set password</Label>
-                </div>
-                {setPasswordChecked && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="u-password">Password</Label>
-                    <Input
-                      id="u-password"
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
-                      placeholder="Min 8 characters"
-                    />
-                  </div>
-                )}
-              </>
             )}
             <div className="flex items-center gap-2">
               <input

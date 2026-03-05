@@ -12,7 +12,6 @@ import {
   networkingMessages,
   users,
 } from "@/db/schema";
-import { speakers } from "@/db/schema";
 
 export interface RawRecapData {
   event: {
@@ -29,7 +28,7 @@ export interface RawRecapData {
     track: string | null;
     startTime: string;
     endTime: string;
-    speakers: { name: string; title: string }[];
+    speakers: { name: string; title: string | null }[];
     commentCount: number;
     upvoteCount: number;
   }[];
@@ -76,7 +75,7 @@ export async function gatherRecapData(
     ),
     with: {
       sessionSpeakers: {
-        with: { speaker: true },
+        with: { user: true },
         orderBy: (sp, { asc }) => [asc(sp.displayOrder)],
       },
     },
@@ -129,8 +128,8 @@ export async function gatherRecapData(
     startTime: s.startTime,
     endTime: s.endTime,
     speakers: s.sessionSpeakers.map((sp) => ({
-      name: sp.speaker.name,
-      title: sp.speaker.title,
+      name: sp.user.name,
+      title: sp.user.title,
     })),
     commentCount: commentMap.get(s.id) ?? 0,
     upvoteCount: upvoteMap.get(s.id) ?? 0,

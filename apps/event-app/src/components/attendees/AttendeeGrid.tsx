@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useEventStore } from "@/lib/stores/eventStore";
-import { useEventAttendees, useEventSpeakers } from "@/hooks/useEventData";
+import { useEventAttendees } from "@/hooks/useEventData";
 import { AttendeeCard } from "./AttendeeCard";
 import { AttendeesSkeleton } from "@/components/skeletons/AttendeesSkeleton";
 
@@ -13,12 +13,6 @@ interface AttendeeGridProps {
 export function AttendeeGrid({ search }: AttendeeGridProps) {
   const currentEvent = useEventStore((s) => s.currentEvent);
   const { data: attendees, isLoading } = useEventAttendees(currentEvent?.id);
-  const { data: speakers } = useEventSpeakers(currentEvent?.id);
-
-  const speakerNames = useMemo(
-    () => new Set(speakers.map((s) => s.name)),
-    [speakers]
-  );
 
   const filtered = useMemo(() => {
     if (!search.trim()) return attendees;
@@ -36,7 +30,6 @@ export function AttendeeGrid({ search }: AttendeeGridProps) {
         <AttendeeCard
           key={attendee.id}
           attendee={attendee}
-          isSpeaker={speakerNames.has(attendee.name)}
         />
       ))}
       {filtered.length === 0 && (

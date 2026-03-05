@@ -16,7 +16,6 @@ import {
   uniqueIndex
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
-import { speakers } from "./speakers";
 import { events } from "./events";
 
 // Update THIS with the actual Session Types
@@ -62,19 +61,19 @@ export const sessionSpeakers = pgTable(
     sessionId: varchar("session_id", { length: 255 })
       .notNull()
       .references(() => eventSessions.id, { onDelete: "cascade" }),
-    speakerId: varchar("speaker_id", { length: 255 })
+    userId: varchar("user_id", { length: 255 })
       .notNull()
-      .references(() => speakers.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "cascade" }),
     displayOrder: integer("display_order").default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("session_speakers_session_speaker_idx").on(
+    uniqueIndex("session_speakers_session_user_idx").on(
       table.sessionId,
-      table.speakerId
+      table.userId
     ),
     index("session_speakers_session_id_idx").on(table.sessionId),
-    index("session_speakers_speaker_id_idx").on(table.speakerId),
+    index("session_speakers_user_id_idx").on(table.userId),
   ]
 );
 

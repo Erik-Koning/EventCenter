@@ -3,7 +3,7 @@ import { handleApiError, commonErrors } from "@/lib/api-error";
 import { getEventContext } from "@/lib/chat/event-context-cache";
 import { db } from "@/lib/db";
 import { eq } from "drizzle-orm";
-import { attendees } from "@/db/schema";
+import { eventAttendees } from "@/db/schema";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { createEventAgent } from "@/lib/ai/agent";
 import { agentStreamToResponse } from "@/lib/ai/stream";
@@ -25,13 +25,12 @@ export async function POST(request: Request) {
       return commonErrors.badRequest("Message is required");
     }
 
-    // Resolve event from attendee enrollment
-    const attendee = await db.query.attendees.findFirst({
-      where: eq(attendees.userId, user.id),
-      with: { eventAttendees: { limit: 1 } },
+    // Resolve event from enrollment
+    const enrollment = await db.query.eventAttendees.findFirst({
+      where: eq(eventAttendees.userId, user.id),
     });
 
-    const eventId = attendee?.eventAttendees?.[0]?.eventId;
+    const eventId = enrollment?.eventId;
 
     // Route @sia commands (and follow-ups in a @sia conversation) to the Sia agent
     const hasSiaMention = /@sia\b/i.test(message);

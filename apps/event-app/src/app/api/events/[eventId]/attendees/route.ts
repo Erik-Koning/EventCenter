@@ -18,12 +18,12 @@ export async function GET(
     const enrollments = await db.query.eventAttendees.findMany({
       where: eq(eventAttendees.eventId, eventId),
       with: {
-        attendee: true,
+        user: true,
       },
     });
 
     const attendeesList = enrollments
-      .map((e) => e.attendee)
+      .map((e) => e.user)
       .filter(Boolean);
 
     return NextResponse.json(attendeesList);

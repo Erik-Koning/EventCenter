@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { eventAttendees, attendees } from "@/db/schema";
+import { eventAttendees, users } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 import { createId } from "@/lib/utils";
 
 const assignAttendeeSchema = z.object({
-  attendeeId: z.string().min(1),
+  userId: z.string().min(1),
 });
 
 type RouteParams = { params: Promise<{ eventId: string }> };
@@ -23,13 +23,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
       .select({
         id: eventAttendees.id,
         eventId: eventAttendees.eventId,
-        attendeeId: eventAttendees.attendeeId,
-        attendeeName: attendees.name,
-        attendeeTitle: attendees.title,
+        userId: eventAttendees.userId,
+        userName: users.name,
+        userTitle: users.title,
         createdAt: eventAttendees.createdAt,
       })
       .from(eventAttendees)
-      .leftJoin(attendees, eq(eventAttendees.attendeeId, attendees.id))
+      .leftJoin(users, eq(eventAttendees.userId, users.id))
       .where(eq(eventAttendees.eventId, eventId));
 
     return NextResponse.json(rows);
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .values({
         id: createId(),
         eventId,
-        attendeeId: validated.attendeeId,
+        userId: validated.userId,
       })
       .returning();
 
@@ -69,11 +69,11 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { eventId } = await params;
     const { searchParams } = new URL(request.url);
-    const attendeeId = searchParams.get("attendeeId");
+    const userId = searchParams.get("userId");
 
-    if (!attendeeId) {
+    if (!userId) {
       return NextResponse.json(
-        { message: "attendeeId query param required", error: "BAD_REQUEST" },
+        { message: "userId query param required", error: "BAD_REQUEST" },
         { status: 400 }
       );
     }
@@ -83,7 +83,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       .where(
         and(
           eq(eventAttendees.eventId, eventId),
-          eq(eventAttendees.attendeeId, attendeeId)
+          eq(eventAttendees.userId, userId)
         )
       );
 

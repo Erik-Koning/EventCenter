@@ -6,6 +6,8 @@
 		"with-env": "dotenv -e ../../.env --",
 		"dev": "pnpm with-env next dev --turbopack --port 9001",
 		"build": "pnpm with-env next build",
+		"build:standalone": "pnpm with-env next build",
+		"build:standalone:prod": "dotenv -e ../../.env.production -- next build",
 		"start": "pnpm with-env next start",
 		"lint": "pnpm with-env next lint",
 		"drizzle-kit": "pnpm with-env drizzle-kit",

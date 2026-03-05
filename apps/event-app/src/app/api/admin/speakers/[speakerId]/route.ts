@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { speakers } from "@/db/schema";
+import { users } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, commonErrors } from "@/lib/api-error";
 
@@ -13,7 +13,7 @@ const updateSpeakerSchema = z.object({
   bio: z.string().optional(),
   imageUrl: z.string().optional(),
   initials: z.string().max(10).optional(),
-  userId: z.string().nullable().optional(),
+  isSpeaker: z.boolean().optional(),
 });
 
 type RouteParams = { params: Promise<{ speakerId: string }> };
@@ -28,9 +28,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const validated = updateSpeakerSchema.parse(body);
 
     const [updated] = await db
-      .update(speakers)
+      .update(users)
       .set({ ...validated, updatedAt: new Date() })
-      .where(eq(speakers.id, speakerId))
+      .where(eq(users.id, speakerId))
       .returning();
 
     if (!updated) return commonErrors.notFound("Speaker");
@@ -47,8 +47,8 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
     const { speakerId } = await params;
     const [deleted] = await db
-      .delete(speakers)
-      .where(eq(speakers.id, speakerId))
+      .delete(users)
+      .where(eq(users.id, speakerId))
       .returning();
 
     if (!deleted) return commonErrors.notFound("Speaker");

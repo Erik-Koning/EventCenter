@@ -8,7 +8,8 @@
       "Bash(python3:*)",
       "Bash(NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm:*)",
       "Bash(mkdir:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(chmod +x:*)"
     ]
   }
 }

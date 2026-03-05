@@ -25,7 +25,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
       columns: { id: true, email: true },
     });
 
-    if (!dbUser) return commonErrors.notFound("User");
+    if (!dbUser || !dbUser.email) return commonErrors.notFound("User");
 
     // Use better-auth's internal API to generate token + send reset email
     await auth.api.requestPasswordReset({

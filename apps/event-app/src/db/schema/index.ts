@@ -21,9 +21,6 @@ export {
   networkingMindMapNodes,
 } from "./networking";
 
-// Speakers
-export { speakers } from "./speakers";
-
 // Sessions
 export {
   trackEnum,
@@ -32,9 +29,6 @@ export {
   sessionUpvotes,
   sessionComments,
 } from "./sessions";
-
-// Attendees
-export { attendees } from "./attendees";
 
 // Events
 export { events, eventAttendees } from "./events";

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { eq, and, asc } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { eventSessions, sessionSpeakers, speakers } from "@/db/schema";
+import { eventSessions, sessionSpeakers, users } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 import { createId } from "@/lib/utils";
@@ -64,20 +64,20 @@ export async function GET(request: Request) {
 
     // Fetch speakers for all sessions in one query
     const sessionIds = rows.map((r) => r.id);
-    let speakerRows: { sessionId: string; speakerId: string; speakerName: string; speakerTitle: string; speakerInitials: string; displayOrder: number | null }[] = [];
+    let speakerRows: { sessionId: string; speakerId: string; speakerName: string; speakerTitle: string | null; speakerInitials: string | null; displayOrder: number | null }[] = [];
 
     if (sessionIds.length > 0) {
       speakerRows = await db
         .select({
           sessionId: sessionSpeakers.sessionId,
-          speakerId: sessionSpeakers.speakerId,
-          speakerName: speakers.name,
-          speakerTitle: speakers.title,
-          speakerInitials: speakers.initials,
+          speakerId: sessionSpeakers.userId,
+          speakerName: users.name,
+          speakerTitle: users.title,
+          speakerInitials: users.initials,
           displayOrder: sessionSpeakers.displayOrder,
         })
         .from(sessionSpeakers)
-        .innerJoin(speakers, eq(sessionSpeakers.speakerId, speakers.id))
+        .innerJoin(users, eq(sessionSpeakers.userId, users.id))
         .orderBy(asc(sessionSpeakers.displayOrder));
     }
 
@@ -135,10 +135,10 @@ export async function POST(request: Request) {
     // Insert speaker associations
     if (validated.speakerIds && validated.speakerIds.length > 0) {
       await db.insert(sessionSpeakers).values(
-        validated.speakerIds.map((speakerId, i) => ({
+        validated.speakerIds.map((userId, i) => ({
           id: createId(),
           sessionId,
-          speakerId,
+          userId,
           displayOrder: i,
         }))
       );

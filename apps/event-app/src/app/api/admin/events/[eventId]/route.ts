@@ -25,7 +25,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const { eventId } = await params;
     const event = await db.query.events.findFirst({
       where: eq(events.id, eventId),
-      with: { sessions: true, eventAttendees: { with: { attendee: true } } },
+      with: { sessions: true, eventAttendees: { with: { user: true } } },
     });
 
     if (!event) return commonErrors.notFound("Event");

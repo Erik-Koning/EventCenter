@@ -17,7 +17,7 @@ const updateSessionSchema = z.object({
   location: z.string().max(500).optional(),
   track: z.enum(["Leadership", "Technology", "Strategy", "Innovation", "Culture"]).nullable().optional(),
   tags: z.array(z.string()).optional(),
-  speakerIds: z.array(z.string()).optional(),
+  userIds: z.array(z.string()).optional(),
 });
 
 type RouteParams = { params: Promise<{ sessionId: string }> };
@@ -30,7 +30,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const { sessionId } = await params;
     const body = await request.json();
     const validated = updateSessionSchema.parse(body);
-    const { speakerIds, ...sessionData } = validated;
+    const { userIds, ...sessionData } = validated;
 
     const [updated] = await db
       .update(eventSessions)
@@ -40,15 +40,15 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     if (!updated) return commonErrors.notFound("Session");
 
-    if (speakerIds !== undefined) {
+    if (userIds !== undefined) {
       // Replace all speakers
       await db.delete(sessionSpeakers).where(eq(sessionSpeakers.sessionId, sessionId));
-      if (speakerIds.length > 0) {
+      if (userIds.length > 0) {
         await db.insert(sessionSpeakers).values(
-          speakerIds.map((speakerId, i) => ({
+          userIds.map((userId, i) => ({
             id: createId(),
             sessionId,
-            speakerId,
+            userId,
             displayOrder: i,
           }))
         );

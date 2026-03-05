@@ -27,14 +27,6 @@ import {
 } from "./sessions";
 
 import {
-  speakers,
-} from "./speakers";
-
-import {
-  attendees,
-} from "./attendees";
-
-import {
   events,
   eventAttendees,
 } from "./events";
@@ -75,6 +67,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   networkingMindMapNodes: many(networkingMindMapNodes),
 
   // Event
+  eventAttendees: many(eventAttendees),
+  sessionSpeakers: many(sessionSpeakers),
   sessionUpvotes: many(sessionUpvotes),
   sessionComments: many(sessionComments),
 }));
@@ -196,9 +190,9 @@ export const sessionSpeakersRelations = relations(sessionSpeakers, ({ one }) => 
     fields: [sessionSpeakers.sessionId],
     references: [eventSessions.id],
   }),
-  speaker: one(speakers, {
-    fields: [sessionSpeakers.speakerId],
-    references: [speakers.id],
+  user: one(users, {
+    fields: [sessionSpeakers.userId],
+    references: [users.id],
   }),
 }));
 
@@ -239,30 +233,6 @@ export const sessionCommentsRelations = relations(
 );
 
 //====================================================================
-// SPEAKER RELATIONS
-//====================================================================
-
-export const speakersRelations = relations(speakers, ({ one, many }) => ({
-  user: one(users, {
-    fields: [speakers.userId],
-    references: [users.id],
-  }),
-  sessionSpeakers: many(sessionSpeakers),
-}));
-
-//====================================================================
-// ATTENDEE RELATIONS
-//====================================================================
-
-export const attendeesRelations = relations(attendees, ({ one, many }) => ({
-  user: one(users, {
-    fields: [attendees.userId],
-    references: [users.id],
-  }),
-  eventAttendees: many(eventAttendees),
-}));
-
-//====================================================================
 // EVENT RELATIONS
 //====================================================================
 
@@ -277,8 +247,8 @@ export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
     fields: [eventAttendees.eventId],
     references: [events.id],
   }),
-  attendee: one(attendees, {
-    fields: [eventAttendees.attendeeId],
-    references: [attendees.id],
+  user: one(users, {
+    fields: [eventAttendees.userId],
+    references: [users.id],
   }),
 }));

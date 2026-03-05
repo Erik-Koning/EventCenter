@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { users, events, eventAttendees, attendees } from "@/db/schema";
+import { users, events, eventAttendees } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, commonErrors } from "@/lib/api-error";
 
@@ -39,19 +39,11 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { eventId } = updateSchema.parse(body);
 
-    // Verify user is an attendee of the event
-    const attendee = await db.query.attendees.findFirst({
-      where: eq(attendees.userId, user.id),
-    });
-
-    if (!attendee) {
-      return commonErrors.forbidden();
-    }
-
+    // Verify user is enrolled in the event
     const enrollment = await db.query.eventAttendees.findFirst({
       where: and(
         eq(eventAttendees.eventId, eventId),
-        eq(eventAttendees.attendeeId, attendee.id)
+        eq(eventAttendees.userId, user.id)
       ),
     });
 

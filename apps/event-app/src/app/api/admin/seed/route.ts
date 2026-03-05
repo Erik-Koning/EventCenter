@@ -4,10 +4,8 @@ import { db } from "@/lib/db";
 import {
   events,
   eventAttendees,
-  speakers,
   eventSessions,
   sessionSpeakers,
-  attendees,
   users,
 } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
@@ -40,7 +38,9 @@ export async function POST() {
       })
       .returning();
 
-    // === SPEAKERS ===
+    const now = new Date();
+
+    // === SPEAKERS (created as users with isSpeaker=true) ===
     const speakerData = [
       {
         id: createId(),
@@ -91,27 +91,30 @@ export async function POST() {
         initials: "DK",
       },
     ];
-    await db.insert(speakers).values(speakerData);
 
-    // === ATTENDEE RECORDS FOR SPEAKERS ===
-    const speakerAttendeeRows = speakerData.map((sp) => ({
-      id: createId(),
-      name: sp.name,
-      title: sp.title,
-      initials: sp.initials,
-      isSpeaker: true,
-      company: sp.company,
-      bio: sp.bio,
-    }));
-    await db.insert(attendees).values(speakerAttendeeRows);
+    await db.insert(users).values(
+      speakerData.map((sp) => ({
+        id: sp.id,
+        name: sp.name,
+        title: sp.title,
+        company: sp.company,
+        bio: sp.bio,
+        initials: sp.initials,
+        isSpeaker: true,
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
+      }))
+    );
 
-    // Link speaker attendees to event
-    const speakerEaRows = speakerAttendeeRows.map((a) => ({
-      id: createId(),
-      eventId,
-      attendeeId: a.id,
-    }));
-    await db.insert(eventAttendees).values(speakerEaRows);
+    // Enroll speakers in event
+    await db.insert(eventAttendees).values(
+      speakerData.map((sp) => ({
+        id: createId(),
+        eventId,
+        userId: sp.id,
+      }))
+    );
 
     // === SESSIONS (5 per day × 3 days) ===
     const sessionData = [
@@ -152,11 +155,11 @@ export async function POST() {
     const ssRows = sessionData.map((s, i) => ({
       id: createId(),
       sessionId: sessionRows[i].id,
-      speakerId: speakerData[s.speakerIdx].id,
+      userId: speakerData[s.speakerIdx].id,
     }));
     await db.insert(sessionSpeakers).values(ssRows);
 
-    // === ATTENDEES ===
+    // === ATTENDEES (non-speaker users) ===
     const attendeeNames = [
       { name: "Alexandra Thompson", title: "VP, Retail Banking", initials: "AT" },
       { name: "Benjamin Park", title: "Director, Risk Management", initials: "BP" },
@@ -185,51 +188,45 @@ export async function POST() {
       { name: "Yusuf Ali", title: "VP, Platform Engineering", initials: "YA" },
     ];
 
-    const attendeeRows = attendeeNames.map((a) => ({
+    const attendeeUserRows = attendeeNames.map((a) => ({
       id: createId(),
       name: a.name,
       title: a.title,
       initials: a.initials,
+      emailVerified: false,
+      createdAt: now,
+      updatedAt: now,
     }));
-    await db.insert(attendees).values(attendeeRows);
+    await db.insert(users).values(attendeeUserRows);
 
     // === EVENT ↔ ATTENDEE LINKS ===
-    const eaRows = attendeeRows.map((a) => ({
+    const eaRows = attendeeUserRows.map((a) => ({
       id: createId(),
       eventId,
-      attendeeId: a.id,
+      userId: a.id,
     }));
     await db.insert(eventAttendees).values(eaRows);
 
     // === ADD SEEDING USER TO GUESTLIST AS ADMIN ===
     const { user } = authResult;
-    let userAttendee = await db.query.attendees.findFirst({
-      where: eq(attendees.userId, user.id),
-    });
-    if (!userAttendee) {
-      const [created] = await db
-        .insert(attendees)
-        .values({
-          id: createId(),
-          name: user.name ?? user.email,
-          title: "Admin",
-          userId: user.id,
-          initials: (user.name ?? "A")
-            .split(/\s+/)
-            .map((w: string) => w[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2),
-        })
-        .returning();
-      userAttendee = created;
-    }
+    await db
+      .update(users)
+      .set({
+        initials: (user.name ?? "A")
+          .split(/\s+/)
+          .map((w: string) => w[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2),
+      })
+      .where(eq(users.id, user.id));
+
     await db
       .insert(eventAttendees)
       .values({
         id: createId(),
         eventId,
-        attendeeId: userAttendee.id,
+        userId: user.id,
         role: "admin",
       })
       .onConflictDoNothing();

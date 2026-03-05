@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { attendees, eventAttendees, events } from "@/db/schema";
+import { eventAttendees } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -11,21 +11,9 @@ export async function GET() {
   const { user } = authResult;
 
   try {
-    // Find the attendee record for this user
-    const attendee = await db.query.attendees.findFirst({
-      where: eq(attendees.userId, user.id),
-    });
-
-    if (!attendee) {
-      return NextResponse.json({
-        events: [],
-        currentEventId: user.currentEventId,
-      });
-    }
-
-    // Find all events this attendee is enrolled in
+    // Find all events this user is enrolled in
     const enrollments = await db.query.eventAttendees.findMany({
-      where: eq(eventAttendees.attendeeId, attendee.id),
+      where: eq(eventAttendees.userId, user.id),
       with: {
         event: true,
       },

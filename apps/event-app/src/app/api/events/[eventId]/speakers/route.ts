@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { eventSessions, sessionSpeakers } from "@/db/schema";
+import { eventSessions } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -21,18 +21,18 @@ export async function GET(
       with: {
         sessionSpeakers: {
           with: {
-            speaker: true,
+            user: true,
           },
         },
       },
     });
 
     // Deduplicate speakers
-    const speakerMap = new Map<string, typeof sessions[0]["sessionSpeakers"][0]["speaker"]>();
+    const speakerMap = new Map<string, typeof sessions[0]["sessionSpeakers"][0]["user"]>();
     for (const session of sessions) {
       for (const ss of session.sessionSpeakers) {
-        if (!speakerMap.has(ss.speaker.id)) {
-          speakerMap.set(ss.speaker.id, ss.speaker);
+        if (!speakerMap.has(ss.user.id)) {
+          speakerMap.set(ss.user.id, ss.user);
         }
       }
     }

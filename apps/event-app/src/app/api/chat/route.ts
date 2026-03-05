@@ -6,7 +6,7 @@ import { getEventContext } from "@/lib/chat/event-context-cache";
 import { searchDiscussions } from "@/lib/chat/search-discussions";
 import { db } from "@/lib/db";
 import { eq } from "drizzle-orm";
-import { attendees } from "@/db/schema";
+import { eventAttendees } from "@/db/schema";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 
 const SEARCH_DISCUSSIONS_TOOL: ChatCompletionTool = {
@@ -84,13 +84,12 @@ export async function POST(request: Request) {
       return commonErrors.badRequest("Message is required");
     }
 
-    // Resolve event from attendee enrollment
-    const attendee = await db.query.attendees.findFirst({
-      where: eq(attendees.userId, user.id),
-      with: { eventAttendees: { limit: 1 } },
+    // Resolve event from enrollment
+    const enrollment = await db.query.eventAttendees.findFirst({
+      where: eq(eventAttendees.userId, user.id),
     });
 
-    const eventId = attendee?.eventAttendees?.[0]?.eventId;
+    const eventId = enrollment?.eventId;
     if (!eventId) {
       return commonErrors.notFound("Event enrollment");
     }

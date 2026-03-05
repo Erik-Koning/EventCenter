@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { eq } from "drizzle-orm";
-import { events, eventSessions, sessionSpeakers, speakers } from "@/db/schema";
+import { events, eventSessions } from "@/db/schema";
 
 export interface EventContext {
   event: {
@@ -22,7 +22,7 @@ export interface EventContext {
     location: string | null;
     track: string | null;
     tags: string[];
-    speakers: { name: string; title: string; company: string | null; bio: string }[];
+    speakers: { name: string; title: string | null; company: string | null; bio: string | null }[];
   }[];
 }
 
@@ -52,7 +52,7 @@ export async function getEventContext(eventId: string): Promise<EventContext | n
     where: eq(eventSessions.eventId, eventId),
     with: {
       sessionSpeakers: {
-        with: { speaker: true },
+        with: { user: true },
       },
     },
   });
@@ -78,10 +78,10 @@ export async function getEventContext(eventId: string): Promise<EventContext | n
       track: s.track,
       tags: (s.tags as string[]) ?? [],
       speakers: s.sessionSpeakers.map((ss) => ({
-        name: ss.speaker.name,
-        title: ss.speaker.title,
-        company: ss.speaker.company,
-        bio: ss.speaker.bio,
+        name: ss.user.name,
+        title: ss.user.title,
+        company: ss.user.company,
+        bio: ss.user.bio,
       })),
     })),
   };
