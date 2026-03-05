@@ -31,6 +31,8 @@ import {
   eventAttendees,
 } from "./events";
 
+import { sessionDocuments } from "./documents";
+
 
 // ============================================
 // USER RELATIONS
@@ -71,6 +73,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   sessionSpeakers: many(sessionSpeakers),
   sessionUpvotes: many(sessionUpvotes),
   sessionComments: many(sessionComments),
+  sessionDocuments: many(sessionDocuments),
 }));
 
 // ============================================
@@ -179,6 +182,7 @@ export const eventSessionsRelations = relations(eventSessions, ({ one, many }) =
   sessionSpeakers: many(sessionSpeakers),
   upvotes: many(sessionUpvotes),
   comments: many(sessionComments),
+  documents: many(sessionDocuments),
 }));
 
 //===================================================================
@@ -240,6 +244,21 @@ export const eventsRelations = relations(events, ({ many }) => ({
   sessions: many(eventSessions),
   eventAttendees: many(eventAttendees),
   networkingGroups: many(networkingGroups),
+}));
+
+//====================================================================
+// SESSION DOCUMENT RELATIONS
+//====================================================================
+
+export const sessionDocumentsRelations = relations(sessionDocuments, ({ one }) => ({
+  session: one(eventSessions, {
+    fields: [sessionDocuments.sessionId],
+    references: [eventSessions.id],
+  }),
+  uploadedBy: one(users, {
+    fields: [sessionDocuments.uploadedById],
+    references: [users.id],
+  }),
 }));
 
 export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({

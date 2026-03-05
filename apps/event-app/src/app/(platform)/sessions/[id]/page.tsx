@@ -10,6 +10,7 @@ import { useEventSessions } from "@/hooks/useEventData";
 import { formatTimeRange } from "@/lib/time";
 import { format } from "date-fns";
 import { SessionChat } from "@/components/sessions/SessionChat";
+import { SessionDocuments } from "@/components/sessions/SessionDocuments";
 
 const TRACK_BADGE_COLORS: Record<string, string> = {
   Leadership: "bg-red-50 text-red-700 border-red-200",
@@ -36,6 +37,7 @@ export default function SessionDetailPage({
   const backMap: Record<string, { href: string; label: string }> = {
     agenda: { href: "/agenda", label: "Back to Agenda" },
     speakers: { href: "/speakers", label: "Back to Speakers" },
+    attendees: { href: "/attendees", label: "Back to Attendees" },
   };
   const back = backMap[from ?? ""] ?? { href: "/sessions", label: "Back to Sessions" };
 
@@ -168,6 +170,12 @@ export default function SessionDetailPage({
           {session.description}
         </p>
       </div>
+
+      {/* Documents */}
+      <SessionDocuments
+        sessionId={id}
+        speakerUserIds={session.speakers.map((s) => s.id)}
+      />
 
       {/* Chat */}
       <SessionChat sessionId={id} />

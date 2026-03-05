@@ -17,7 +17,7 @@ const createSessionSchema = z.object({
   location: z.string().max(500).optional(),
   track: z.enum(["Leadership", "Technology", "Strategy", "Innovation", "Culture"]).optional(),
   tags: z.array(z.string()).optional(),
-  userIds: z.array(z.string()).optional(),
+  speakerIds: z.array(z.string()).optional(),
 });
 
 export async function GET(request: Request) {
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const validated = createSessionSchema.parse(body);
-    const { userIds, ...sessionData } = validated;
+    const { speakerIds, ...sessionData } = validated;
 
     const sessionId = createId();
     const [session] = await db
@@ -66,9 +66,9 @@ export async function POST(request: Request) {
       })
       .returning();
 
-    if (userIds && userIds.length > 0) {
+    if (speakerIds && speakerIds.length > 0) {
       await db.insert(sessionSpeakers).values(
-        userIds.map((userId, i) => ({
+        speakerIds.map((userId, i) => ({
           id: createId(),
           sessionId,
           userId,

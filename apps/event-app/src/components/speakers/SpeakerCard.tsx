@@ -52,7 +52,7 @@ export function SpeakerCard({ speaker, sessions }: SpeakerCardProps) {
       {speakerSessions.length > 0 && (
         <div className="mt-6">
           <p className="mb-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Sessions
+            Speaking At
           </p>
           <div className="grid gap-2">
             {speakerSessions.map((session) => (

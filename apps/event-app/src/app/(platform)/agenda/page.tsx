@@ -127,7 +127,7 @@ export default function AgendaPage() {
                   "rounded-xl px-4 py-2 text-sm font-medium transition-all",
                   activeDayIndex === i
                     ? "bg-primary text-white shadow-sm"
-                    : "border border-border bg-white text-muted-foreground hover:bg-muted hover:text-foreground"
+                    : "border border-border bg-gradient-to-br from-primary/[0.04] to-transparent text-muted-foreground hover:from-primary/[0.08] hover:text-foreground"
                 )}
               >
                 {formatDayLabel(date, i + 1)}

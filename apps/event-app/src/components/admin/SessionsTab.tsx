@@ -54,6 +54,14 @@ interface Recipient {
 
 const TRACKS = ["Leadership", "Technology", "Strategy", "Innovation", "Culture"] as const;
 
+const TRACK_BADGE_COLORS: Record<string, string> = {
+  Leadership: "bg-red-50 text-red-700 border-red-200",
+  Technology: "bg-blue-50 text-blue-700 border-blue-200",
+  Strategy: "bg-amber-50 text-amber-700 border-amber-200",
+  Innovation: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Culture: "bg-violet-50 text-violet-700 border-violet-200",
+};
+
 const emptyForm = {
   eventId: "",
   title: "",
@@ -385,7 +393,7 @@ export function SessionsTab() {
                 <TableCell>{s.date}</TableCell>
                 <TableCell>{s.startTime}–{s.endTime}</TableCell>
                 <TableCell>
-                  {s.track ? <Badge variant="outline">{s.track}</Badge> : "—"}
+                  {s.track ? <Badge variant="outline" className={TRACK_BADGE_COLORS[s.track] ?? ""}>{s.track}</Badge> : "—"}
                 </TableCell>
                 <TableCell>
                   {s.sessionSpeakers.map((ss) => ss.user.name).join(", ") || "—"}
