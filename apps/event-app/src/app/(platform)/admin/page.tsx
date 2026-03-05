@@ -8,7 +8,7 @@ import { EventsTab } from "@/components/admin/EventsTab";
 import { SessionsTab } from "@/components/admin/SessionsTab";
 import { UsersTab } from "@/components/admin/UsersTab";
 
-const TAB_NAMES = ["Events", "Sessions", "Users"];
+const TAB_NAMES = ["Events", "Sessions", "Attendees"];
 const TAB_COMPONENTS = [EventsTab, SessionsTab, UsersTab];
 
 export default function AdminPage() {

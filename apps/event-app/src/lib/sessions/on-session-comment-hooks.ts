@@ -5,94 +5,16 @@ import { eq, and, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessionComments, eventSessions, users } from "@/db/schema";
 import { getModelMini } from "@/lib/ai/model";
-import { getDeploymentNameMini } from "@/lib/azure-openai";
-import { getRequiredEnv } from "@/lib/environment";
 import { broadcastToGroup } from "@/lib/pubsub";
 import { createId } from "@/lib/utils";
+import {
+  webSearchTool,
+  makePostMessageToGroupTool,
+  makeCreateNetworkingGroupTool,
+  ensureSiaUser,
+} from "@/lib/networking/sia-agent";
 
 const SIA_USER_ID = "sia-agent";
-
-let siaUserEnsured = false;
-
-async function ensureSiaUser() {
-  if (siaUserEnsured) return;
-  const existing = await db.query.users.findFirst({
-    where: eq(users.id, SIA_USER_ID),
-    columns: { id: true },
-  });
-  if (!existing) {
-    await db.insert(users).values({
-      id: SIA_USER_ID,
-      email: "sia@system.local",
-      name: "Sia",
-      emailVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      role: "user",
-      blocked: false,
-    }).onConflictDoNothing();
-  }
-  siaUserEnsured = true;
-}
-
-// ---------------------------------------------------------------------------
-// Tool: web_search (Azure OpenAI Responses API + web_search_preview)
-// ---------------------------------------------------------------------------
-
-function getAzureBaseUrl(): string {
-  const raw = getRequiredEnv("AZURE_OPENAI_ENDPOINT");
-  try {
-    const url = new URL(raw);
-    return url.origin;
-  } catch {
-    return raw.replace(/\/openai\/.*$/, "").replace(/\/$/, "");
-  }
-}
-
-const webSearchTool = new DynamicStructuredTool({
-  name: "web_search",
-  description:
-    "Search the web for information on a topic. Use this to research questions, verify facts, or find relevant articles.",
-  schema: z.object({
-    query: z.string().describe("The search query"),
-  }),
-  func: async ({ query }) => {
-    try {
-      const baseUrl = getAzureBaseUrl();
-      const apiKey = getRequiredEnv("AZURE_OPENAI_API_KEY");
-      const model = getDeploymentNameMini();
-
-      const res = await fetch(`${baseUrl}/openai/v1/responses`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "api-key": apiKey,
-        },
-        body: JSON.stringify({
-          model,
-          tools: [{ type: "web_search_preview" }],
-          input: query,
-        }),
-      });
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        console.error(`[sia-session] web_search HTTP ${res.status}:`, body);
-        return `Search failed (${res.status}). Respond based on your existing knowledge.`;
-      }
-
-      const data = await res.json();
-      const outputMessage = data.output?.find(
-        (item: { type: string }) => item.type === "message"
-      );
-      const text = outputMessage?.content?.[0]?.text;
-      return text || "No results found.";
-    } catch (error) {
-      console.error("[sia-session] web_search error:", error);
-      return "Search failed. Respond based on your existing knowledge.";
-    }
-  },
-});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -159,16 +81,14 @@ function makePostReplyTool(sessionId: string) {
 
 async function runSiaSessionAgent(
   sessionId: string,
-  _userId: string,
-  _userName: string
+  userId: string,
+  userName: string
 ): Promise<void> {
   try {
-    await ensureSiaUser();
-
-    // Fetch session info for context
+    // Fetch session info for context (including eventId for group creation)
     const session = await db.query.eventSessions.findFirst({
       where: eq(eventSessions.id, sessionId),
-      columns: { title: true, description: true },
+      columns: { title: true, description: true, eventId: true },
     });
 
     // Fetch last 50 non-AI comments
@@ -200,6 +120,12 @@ async function runSiaSessionAgent(
 
     const systemPrompt = `You are Sia, a friendly AI participant in a session discussion chat.
 You sound like a knowledgeable colleague, not a bot.
+
+RULES — YOU MUST FOLLOW THESE:
+1. You can ONLY affect the real world through tool calls. If you did not call a tool, the action DID NOT happen.
+2. NEVER claim you posted, sent, or created something unless the tool was called AND returned a success message in this turn.
+3. When the user asks to create a networking group, you MUST call the create_networking_group tool. Do not just describe what a group could look like.
+4. When the user asks to post a message to a group, you MUST call the post_message_to_group tool.
 ${sessionContext}
 
 CONVERSATION CONTEXT (last ${contextMessages.length} messages):
@@ -208,21 +134,32 @@ ${formatMessages(contextMessages)}
 RECENT MESSAGES (last ${recentMessages.length}):
 ${formatMessages(recentMessages)}
 
+TOOLS:
+- post_reply_to_session(message) → post a reply in THIS session chat
+- create_networking_group(name, description, openingMessage) → create a new networking group
+- post_message_to_group(groupName, message) → post a message to an existing networking group
+- web_search(query) → research a topic
+
 INSTRUCTIONS:
 - Focus primarily on the MOST RECENT message — that's who tagged you and what they want
-- If it's a direct question or request (research, explain, summarize), use the appropriate tool
-- If it's just conversational, reply in 1-2 short sentences like a colleague would
-- Use the web_search tool only when the question genuinely needs research
-- Use post_reply_to_session to post your response
+- If asked to create a group, CALL create_networking_group — do not just talk about it
+- If asked to post to a group, CALL post_message_to_group — do not just talk about it
+- If it's a research question, use web_search then post_reply_to_session with the answer
+- If it's just conversational, reply in 1-2 short sentences using post_reply_to_session
 - Never start with "Great question!" or other generic filler
 - Do not introduce yourself or explain that you are an AI
 - Keep responses relevant to the session topic when possible`;
 
     const postTool = makePostReplyTool(sessionId);
+    const postToGroupTool = makePostMessageToGroupTool(userName);
+    const createGroupTool = makeCreateNetworkingGroupTool({
+      invokingUserId: userId,
+      eventId: session?.eventId ?? null,
+    });
 
     const agent = createReactAgent({
       llm: getModelMini(),
-      tools: [webSearchTool, postTool],
+      tools: [webSearchTool, postTool, postToGroupTool, createGroupTool],
       prompt: systemPrompt,
     });
 

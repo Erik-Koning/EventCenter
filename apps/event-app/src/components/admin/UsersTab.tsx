@@ -52,6 +52,8 @@ const emptyForm = {
   isSpeaker: false,
   company: "",
   bio: "",
+  email: "",
+  password: "",
 };
 
 export function UsersTab() {
@@ -65,6 +67,7 @@ export function UsersTab() {
   const [newPassword, setNewPassword] = useState("");
   const [sendingResetEmail, setSendingResetEmail] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [setPasswordChecked, setSetPasswordChecked] = useState(false);
 
   const fetchPeople = async () => {
     setLoading(true);
@@ -78,6 +81,7 @@ export function UsersTab() {
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
+    setSetPasswordChecked(false);
     setDialogOpen(true);
   };
 
@@ -91,17 +95,36 @@ export function UsersTab() {
       isSpeaker: p.isSpeaker,
       company: p.company ?? "",
       bio: p.bio ?? "",
+      email: p.userEmail ?? "",
+      password: "",
     });
+    setSetPasswordChecked(false);
     setDialogOpen(true);
   };
 
   const handleSubmit = async () => {
     const url = editing ? `/api/admin/attendees/${editing.id}` : "/api/admin/attendees";
     const method = editing ? "PUT" : "POST";
+    const { email, password, ...rest } = form;
+    let payload: Record<string, unknown>;
+    if (editing?.userId) {
+      // Already has an account — don't send email/password
+      payload = rest;
+    } else if (editing && !editing.userId && email) {
+      // Editing attendee without account — send email to find/create user
+      payload = setPasswordChecked && password
+        ? { ...rest, email, password }
+        : { ...rest, email };
+    } else if (!editing && email) {
+      // Creating new — include email, password if provided
+      payload = password ? { ...rest, email, password } : { ...rest, email };
+    } else {
+      payload = rest;
+    }
     const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       setDialogOpen(false);
@@ -110,7 +133,7 @@ export function UsersTab() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this user?")) return;
+    if (!confirm("Delete this attendee?")) return;
     const res = await fetch(`/api/admin/attendees/${id}`, { method: "DELETE" });
     if (res.ok) fetchPeople();
   };
@@ -179,14 +202,14 @@ export function UsersTab() {
     <div>
       <div className="mb-4 flex justify-end">
         <Button onClick={openCreate} size="sm">
-          <Plus className="mr-1 h-4 w-4" /> Add User
+          <Plus className="mr-1 h-4 w-4" /> Add Attendee
         </Button>
       </div>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading...</p>
       ) : people.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No users yet.</p>
+        <p className="text-sm text-muted-foreground">No attendees yet.</p>
       ) : (
         <Table>
           <TableHeader>
@@ -337,9 +360,9 @@ export function UsersTab() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg rounded-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit User" : "Add User"}</DialogTitle>
+            <DialogTitle>{editing ? "Edit Attendee" : "Add Attendee"}</DialogTitle>
             <DialogDescription>
-              {editing ? "Update user details." : "Fill in the user details."}
+              {editing ? "Update attendee details." : "Fill in the attendee details."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -367,6 +390,61 @@ export function UsersTab() {
               <Label htmlFor="u-image">Image URL</Label>
               <Input id="u-image" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} />
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="u-email">Email</Label>
+              {editing?.userId ? (
+                <Input id="u-email" value={form.email} disabled className="bg-muted" />
+              ) : (
+                <Input
+                  id="u-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="user@example.com"
+                />
+              )}
+            </div>
+            {!editing && form.email && (
+              <div className="grid gap-2">
+                <Label htmlFor="u-password">Password</Label>
+                <Input
+                  id="u-password"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  placeholder="Min 8 characters"
+                />
+              </div>
+            )}
+            {editing && !editing.userId && form.email && (
+              <>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="u-set-password"
+                    type="checkbox"
+                    checked={setPasswordChecked}
+                    onChange={(e) => {
+                      setSetPasswordChecked(e.target.checked);
+                      if (!e.target.checked) setForm({ ...form, password: "" });
+                    }}
+                    className="h-4 w-4 rounded border-border accent-primary"
+                  />
+                  <Label htmlFor="u-set-password" className="cursor-pointer">Set password</Label>
+                </div>
+                {setPasswordChecked && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="u-password">Password</Label>
+                    <Input
+                      id="u-password"
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      placeholder="Min 8 characters"
+                    />
+                  </div>
+                )}
+              </>
+            )}
             <div className="flex items-center gap-2">
               <input
                 id="u-speaker"

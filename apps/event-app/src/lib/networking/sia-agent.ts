@@ -14,7 +14,7 @@ const SIA_USER_ID = "sia-agent";
 
 let siaUserEnsured = false;
 
-async function ensureSiaUser() {
+export async function ensureSiaUser() {
   if (siaUserEnsured) return;
   const existing = await db.query.users.findFirst({
     where: eq(users.id, SIA_USER_ID),
@@ -50,7 +50,7 @@ function getAzureBaseUrl(): string {
   }
 }
 
-const webSearchTool = new DynamicStructuredTool({
+export const webSearchTool = new DynamicStructuredTool({
   name: "web_search",
   description:
     "Search the web for information on a topic. Use this to research questions, verify facts, or find relevant articles.",
@@ -106,7 +106,7 @@ const webSearchTool = new DynamicStructuredTool({
 // Tool: post_message_to_group
 // ---------------------------------------------------------------------------
 
-function makePostMessageToGroupTool(senderName: string) {
+export function makePostMessageToGroupTool(senderName: string) {
   return new DynamicStructuredTool({
     name: "post_message_to_group",
     description:
@@ -218,7 +218,7 @@ function findSimilarGroup(
   return null;
 }
 
-function makeCreateNetworkingGroupTool(ctx: { invokingUserId: string; eventId: string | null }) {
+export function makeCreateNetworkingGroupTool(ctx: { invokingUserId: string; eventId: string | null }) {
   return new DynamicStructuredTool({
     name: "create_networking_group",
     description:
