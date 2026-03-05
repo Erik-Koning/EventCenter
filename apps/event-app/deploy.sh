@@ -229,32 +229,13 @@ fi
 # Stage all files
 git add -A
 
-# Check if there's anything to commit
-if git diff --cached --quiet 2>/dev/null; then
-  echo "  No changes to commit (artifact unchanged)."
-  echo "  Force-pushing existing commit..."
-  COMMIT_MSG="Deploy $(date '+%Y-%m-%d %H:%M') [${CURRENT_BRANCH}] (rebuild)"
-  git commit --allow-empty -m "$COMMIT_MSG"
-else
-  echo "  Changes staged for commit:"
-  echo ""
-  git diff --cached --stat | head -20
-  TOTAL_CHANGED=$(git diff --cached --stat | tail -1)
-  echo "  $TOTAL_CHANGED"
-  echo ""
+# Commit with git author name + date
+GIT_AUTHOR=$(cd "$REPO_ROOT" && git config user.name 2>/dev/null || echo "deploy")
+COMMIT_MSG="${GIT_AUTHOR} $(date '+%Y-%m-%d %H:%M')"
+echo "  Committing: $COMMIT_MSG"
+git commit --allow-empty -m "$COMMIT_MSG"
 
-  if [ "$AUTO_YES" = true ]; then
-    COMMIT_MSG="Deploy $(date '+%Y-%m-%d %H:%M') [${CURRENT_BRANCH}]"
-    echo "  Auto-committing: $COMMIT_MSG"
-  else
-    DEFAULT_MSG="Deploy $(date '+%Y-%m-%d %H:%M') [${CURRENT_BRANCH}]"
-    read -p "  Commit message (Enter for '$DEFAULT_MSG'): " USER_MSG
-    COMMIT_MSG="${USER_MSG:-$DEFAULT_MSG}"
-  fi
-
-  git commit -m "$COMMIT_MSG"
-fi
-
+# Push to Azure
 echo ""
 echo "  Pushing to azure (master) --force..."
 git push azure master --force
@@ -266,15 +247,23 @@ echo "=========================================="
 
 # ── Post-deploy info ────────────────────────────────────────────
 echo ""
-echo "Azure App Settings Required:"
-echo "  SCM_DO_BUILD_DURING_DEPLOYMENT = false"
-echo "  ENABLE_ORYX_BUILD             = false"
-echo "  HOSTNAME                      = 0.0.0.0"
+echo "  Startup command:  $STARTUP_CMD"
 echo ""
-echo "Startup Command:"
-echo "  $STARTUP_CMD"
+echo "  Test locally:"
+echo "    cd \"$STANDALONE_DIR\""
+echo "    PORT=8080 HOSTNAME=0.0.0.0 $STARTUP_CMD"
 echo ""
-echo "Test locally:"
-echo "  cd \"$STANDALONE_DIR\""
-echo "  PORT=8080 HOSTNAME=0.0.0.0 $STARTUP_CMD"
+echo "=========================================="
+echo "  IMPORTANT: Azure App Settings Reminder"
+echo "=========================================="
+echo ""
+echo "  Set these in Azure Portal > App Service > Configuration > Application Settings:"
+echo ""
+echo "    SCM_DO_BUILD_DURING_DEPLOYMENT = false   *** MUST be false — we push pre-built artifacts ***"
+echo "    ENABLE_ORYX_BUILD              = false   *** MUST be false — skip Azure's build pipeline ***"
+echo "    HOSTNAME                       = 0.0.0.0"
+echo "    PORT                           = 8080"
+echo ""
+echo "  Startup Command (set in Azure Portal > App Service > Configuration > General Settings):"
+echo "    $STARTUP_CMD"
 echo ""
