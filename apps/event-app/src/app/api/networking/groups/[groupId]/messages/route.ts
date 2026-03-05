@@ -17,6 +17,11 @@ const sendMessageSchema = z.object({
   content: z.string().min(1).max(5000),
 });
 
+const editMessageSchema = z.object({
+  messageId: z.string().min(1),
+  content: z.string().min(1).max(5000),
+});
+
 /**
  * GET /api/networking/groups/[groupId]/messages - Get messages, supports ?after=timestamp
  */
@@ -46,6 +51,7 @@ export async function GET(
         content: networkingMessages.content,
         isAiSummary: networkingMessages.isAiSummary,
         createdAt: networkingMessages.createdAt,
+        updatedAt: networkingMessages.updatedAt,
       })
       .from(networkingMessages)
       .leftJoin(users, eq(networkingMessages.userId, users.id))
@@ -118,5 +124,51 @@ export async function POST(
     );
   } catch (error) {
     return handleApiError(error, "networking/groups/[groupId]/messages:POST");
+  }
+}
+
+/**
+ * PUT /api/networking/groups/[groupId]/messages - Edit own message
+ */
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ groupId: string }> }
+) {
+  const authResult = await requireAuth();
+  if (!authResult.success) return authResult.response;
+  const { user } = authResult;
+  const { groupId } = await params;
+
+  try {
+    const body = await request.json();
+    const validated = editMessageSchema.parse(body);
+
+    // Verify message exists, belongs to user, and is not AI summary
+    const existing = await db.query.networkingMessages.findFirst({
+      where: and(
+        eq(networkingMessages.id, validated.messageId),
+        eq(networkingMessages.groupId, groupId)
+      ),
+    });
+
+    if (!existing) return commonErrors.notFound();
+    if (existing.userId !== user.id) return commonErrors.forbidden();
+    if (existing.isAiSummary) return commonErrors.forbidden();
+
+    const now = new Date();
+    const [updated] = await db
+      .update(networkingMessages)
+      .set({ content: validated.content, updatedAt: now })
+      .where(eq(networkingMessages.id, validated.messageId))
+      .returning();
+
+    await broadcastToGroup(groupId, {
+      type: "message:edited",
+      data: { id: updated.id, content: updated.content, updatedAt: updated.updatedAt },
+    });
+
+    return NextResponse.json({ ...updated, userName: user.name });
+  } catch (error) {
+    return handleApiError(error, "networking/groups/[groupId]/messages:PUT");
   }
 }

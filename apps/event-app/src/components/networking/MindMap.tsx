@@ -181,8 +181,38 @@ export function MindMap() {
     );
   }
 
+  // Compute edge count per node (parent edge + child edges)
+  const edgeCounts = new Map<string, number>();
+  for (const node of nodes) {
+    edgeCounts.set(node.id, (edgeCounts.get(node.id) ?? 0));
+    if (node.parentId) {
+      edgeCounts.set(node.id, (edgeCounts.get(node.id) ?? 0) + 1);
+      edgeCounts.set(node.parentId, (edgeCounts.get(node.parentId) ?? 0) + 1);
+    }
+  }
+
+  // 0 edges (isolated) or 1 edge (leaf) → 52, 2 edges → 65, 3 → 72, 4+ → 79
+  function getNodeRadius(nodeId: string): number {
+    const count = edgeCounts.get(nodeId) ?? 0;
+    if (count <= 1) return 52;
+    if (count === 2) return 65;
+    if (count === 3) return 72;
+    return 79; // 4+
+  }
+
+  function getNodeFontSize(nodeId: string): number {
+    const r = getNodeRadius(nodeId);
+    if (r <= 52) return 17;
+    if (r <= 65) return 20;
+    return 22;
+  }
+
+  function getNodeFontWeight(nodeId: string): number {
+    return getNodeRadius(nodeId) >= 65 ? 600 : 400;
+  }
+
   const newNodePos = creatingFor ? getNewNodePosition() : null;
-  const newNodeRadius = creatingFor === "root" ? 65 : 52;
+  const newNodeRadius = 52; // new nodes start as leaves
 
   return (
     <div className="relative flex h-full flex-col">
@@ -248,80 +278,85 @@ export function MindMap() {
             )}
 
             {/* Nodes */}
-            {nodes.map((node) => (
-              <g
-                key={node.id}
-                onMouseDown={(e) => handleMouseDown(e, node)}
-                style={{ cursor: dragState?.nodeId === node.id ? "grabbing" : "grab" }}
-              >
-                {/* Circle */}
-                <circle
-                  cx={node.positionX}
-                  cy={node.positionY}
-                  r={node.parentId ? 52 : 65}
-                  fill={
-                    selectedNode === node.id
-                      ? "rgba(220, 38, 38, 0.12)"
-                      : node.parentId
-                      ? "white"
-                      : "rgba(220, 38, 38, 0.06)"
-                  }
-                  stroke={
-                    selectedNode === node.id
-                      ? "var(--primary)"
-                      : "var(--border)"
-                  }
-                  strokeWidth={selectedNode === node.id ? 2 : 1}
-                />
-                {/* Label */}
-                <text
-                  x={node.positionX}
-                  y={node.positionY}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  className="select-none pointer-events-none"
-                  fill="var(--foreground)"
-                  fontSize={node.parentId ? 17 : 20}
-                  fontWeight={node.parentId ? 400 : 600}
-                >
-                  {node.label.length > 16
-                    ? node.label.slice(0, 14) + "..."
-                    : node.label}
-                </text>
-
-                {/* Add child button — larger */}
+            {nodes.map((node) => {
+              const r = getNodeRadius(node.id);
+              const isHighlighted = (edgeCounts.get(node.id) ?? 0) >= 2;
+              const btnOffset = r * 0.72;
+              return (
                 <g
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCreatingFor(node.id);
-                    setSelectedNode(node.id);
-                  }}
-                  className="cursor-pointer"
+                  key={node.id}
+                  onMouseDown={(e) => handleMouseDown(e, node)}
+                  style={{ cursor: dragState?.nodeId === node.id ? "grabbing" : "grab" }}
                 >
+                  {/* Circle */}
                   <circle
-                    cx={node.positionX + (node.parentId ? 46 : 58)}
-                    cy={node.positionY - (node.parentId ? 38 : 50)}
-                    r={22}
-                    fill="white"
-                    stroke="var(--primary)"
-                    strokeWidth="1.5"
-                    opacity={0.85}
+                    cx={node.positionX}
+                    cy={node.positionY}
+                    r={r}
+                    fill={
+                      selectedNode === node.id
+                        ? "rgba(220, 38, 38, 0.12)"
+                        : isHighlighted
+                        ? "rgba(220, 38, 38, 0.06)"
+                        : "white"
+                    }
+                    stroke={
+                      selectedNode === node.id
+                        ? "var(--primary)"
+                        : "var(--border)"
+                    }
+                    strokeWidth={selectedNode === node.id ? 2 : 1}
                   />
+                  {/* Label */}
                   <text
-                    x={node.positionX + (node.parentId ? 46 : 58)}
-                    y={node.positionY - (node.parentId ? 38 : 50)}
+                    x={node.positionX}
+                    y={node.positionY}
                     textAnchor="middle"
                     dominantBaseline="central"
-                    fill="var(--primary)"
-                    fontSize="26"
-                    fontWeight="bold"
-                    className="pointer-events-none select-none"
+                    className="select-none pointer-events-none"
+                    fill="var(--foreground)"
+                    fontSize={getNodeFontSize(node.id)}
+                    fontWeight={getNodeFontWeight(node.id)}
                   >
-                    +
+                    {node.label.length > 16
+                      ? node.label.slice(0, 14) + "..."
+                      : node.label}
                   </text>
+
+                  {/* Add child button */}
+                  <g
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCreatingFor(node.id);
+                      setSelectedNode(node.id);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <circle
+                      cx={node.positionX + btnOffset}
+                      cy={node.positionY - btnOffset}
+                      r={22}
+                      fill="white"
+                      stroke="var(--primary)"
+                      strokeWidth="1.5"
+                      opacity={0.85}
+                    />
+                    <text
+                      x={node.positionX + btnOffset}
+                      y={node.positionY - btnOffset}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill="var(--primary)"
+                      fontSize="26"
+                      fontWeight="bold"
+                      className="pointer-events-none select-none"
+                    >
+                      +
+                    </text>
+                  </g>
                 </g>
-              </g>
-            ))}
+              );
+            })}
 
             {/* Inline input circle for new node */}
             {creatingFor && newNodePos && (

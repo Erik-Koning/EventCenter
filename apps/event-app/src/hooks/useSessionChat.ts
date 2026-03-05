@@ -9,6 +9,7 @@ export interface SessionChatMessage {
   content: string;
   isAiSummary: boolean;
   createdAt: string;
+  editedAt?: string;
 }
 
 const POLL_MS = 3_000;
@@ -33,6 +34,15 @@ export function useSessionChat(sessionId: string) {
       return [...prev, ...unique];
     });
   }, []);
+
+  const updateMessage = useCallback(
+    (id: string, content: string, editedAt: string) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, content, editedAt } : m))
+      );
+    },
+    []
+  );
 
   // Fetch + WebSocket + polling fallback
   useEffect(() => {
@@ -94,6 +104,9 @@ export function useSessionChat(sessionId: string) {
           if (payload.type === "message:new") {
             const msg = payload.data as unknown as SessionChatMessage;
             appendMessages([msg]);
+          } else if (payload.type === "message:edited") {
+            const { id, content, updatedAt } = payload.data as { id: string; content: string; updatedAt: string };
+            updateMessage(id, content, updatedAt);
           }
         });
 
@@ -102,6 +115,9 @@ export function useSessionChat(sessionId: string) {
           if (payload.type === "message:new") {
             const msg = payload.data as unknown as SessionChatMessage;
             appendMessages([msg]);
+          } else if (payload.type === "message:edited") {
+            const { id, content, updatedAt } = payload.data as { id: string; content: string; updatedAt: string };
+            updateMessage(id, content, updatedAt);
           }
         });
 
@@ -200,5 +216,5 @@ export function useSessionChat(sessionId: string) {
     [sessionId, appendMessages]
   );
 
-  return { messages, loading, wsConnected, sendMessage };
+  return { messages, loading, wsConnected, sendMessage, updateMessage };
 }

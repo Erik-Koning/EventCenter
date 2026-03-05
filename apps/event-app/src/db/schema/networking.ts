@@ -85,6 +85,7 @@ export const networkingMessages = pgTable(
     content: text("content").notNull(),
     isAiSummary: boolean("is_ai_summary").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
     index("networking_messages_group_id_idx").on(table.groupId),

@@ -54,14 +54,25 @@ export default function AgendaPage() {
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
   const pastDays = useMemo(() => days.filter((d) => d < today), [days, today]);
 
-  // Auto-trigger recap generation for past days
+  // Track which days have a ready recap (keyed by date string)
+  const [readyRecaps, setReadyRecaps] = useState<Set<string>>(new Set());
+
+  // Auto-trigger recap generation for past days + check all days for ready recaps
   useEffect(() => {
-    if (!currentEvent?.id || pastDays.length === 0) return;
-    for (const date of pastDays) {
+    if (!currentEvent?.id || days.length === 0) return;
+    for (const date of days) {
       fetch(`/api/events/${currentEvent.id}/recap?date=${date}`)
         .then((r) => r.json())
         .then((data) => {
-          if (data.status === "not_started") {
+          if (data.status === "ready") {
+            setReadyRecaps((prev) => {
+              if (prev.has(date)) return prev;
+              const next = new Set(prev);
+              next.add(date);
+              return next;
+            });
+          } else if (data.status === "not_started" && date < today) {
+            // Auto-trigger for past days only
             fetch(`/api/events/${currentEvent.id}/recap`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -71,7 +82,7 @@ export default function AgendaPage() {
         })
         .catch(() => {});
     }
-  }, [currentEvent?.id, pastDays]);
+  }, [currentEvent?.id, days, today]);
 
   // Recap hook for the currently selected recap date
   const { recap, isLoading: recapLoading } = useRecap(
@@ -121,7 +132,7 @@ export default function AgendaPage() {
               >
                 {formatDayLabel(date, i + 1)}
               </TabsTrigger>
-              {date < today && (
+              {(date < today || readyRecaps.has(date)) && (
                 <button
                   onClick={() => setRecapDate(date)}
                   className="flex items-center gap-1.5 rounded-lg border border-primary/15 bg-primary/[0.04] px-2.5 py-1 text-[11px] font-medium text-primary transition-all hover:bg-primary/10 hover:border-primary/25"
@@ -145,7 +156,18 @@ export default function AgendaPage() {
         recap={recap}
         isLoading={recapLoading}
         open={recapDate !== null}
-        onClose={() => setRecapDate(null)}
+        onClose={() => {
+          // Mark this date as ready so the button stays visible
+          if (recap && recapDate) {
+            setReadyRecaps((prev) => {
+              if (prev.has(recapDate)) return prev;
+              const next = new Set(prev);
+              next.add(recapDate);
+              return next;
+            });
+          }
+          setRecapDate(null);
+        }}
       />
     </>
   );

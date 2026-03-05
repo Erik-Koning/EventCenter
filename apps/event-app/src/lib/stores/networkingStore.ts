@@ -25,6 +25,7 @@ export interface NetworkingMessage {
   content: string;
   isAiSummary: boolean;
   createdAt: string;
+  editedAt?: string;
 }
 
 export interface MindMapNode {
@@ -63,6 +64,7 @@ interface NetworkingState {
   selectGroup: (groupId: string | null) => void;
   setMessages: (messages: NetworkingMessage[]) => void;
   appendMessages: (messages: NetworkingMessage[]) => void;
+  updateMessage: (id: string, updates: Partial<NetworkingMessage>) => void;
   setMindMapNodes: (nodes: MindMapNode[]) => void;
   updateMindMapNode: (nodeId: string, updates: Partial<MindMapNode>) => void;
   addMindMapNode: (node: MindMapNode) => void;
@@ -108,6 +110,13 @@ export const useNetworkingStore = create<NetworkingState>((set) => ({
       if (unique.length === 0) return state;
       return { messages: [...state.messages, ...unique] };
     }),
+
+  updateMessage: (id, updates) =>
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === id ? { ...m, ...updates } : m
+      ),
+    })),
 
   setMindMapNodes: (nodes) => {
     const seen = new Set<string>();

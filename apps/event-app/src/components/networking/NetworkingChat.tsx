@@ -7,14 +7,18 @@ import { useNetworkingStore } from "@/lib/stores/networkingStore";
 import { ChatMessage } from "./ChatMessage";
 import { useSiaMention } from "@/hooks/useSiaMention";
 import { SiaMentionPopover } from "@/components/chat/SiaMentionPopover";
+import { authClient } from "@/lib/auth-client";
 
 interface NetworkingChatProps {
   showJoinButton?: boolean;
 }
 
 export function NetworkingChat({ showJoinButton = true }: NetworkingChatProps) {
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
   const selectedGroupId = useNetworkingStore((s) => s.selectedGroupId);
   const messages = useNetworkingStore((s) => s.messages);
+  const updateMessage = useNetworkingStore((s) => s.updateMessage);
   const isMember = useNetworkingStore((s) => s.isMember);
   const setIsMember = useNetworkingStore((s) => s.setIsMember);
   const appendMessages = useNetworkingStore((s) => s.appendMessages);
@@ -178,7 +182,26 @@ export function NetworkingChat({ showJoinButton = true }: NetworkingChatProps) {
             </p>
           </div>
         ) : messages.length === 0 ? null : (
-          messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)
+          messages.map((msg) => (
+            <ChatMessage
+              key={msg.id}
+              message={msg}
+              currentUserId={currentUserId}
+              onEdit={async (newContent) => {
+                const res = await fetch(
+                  `/api/networking/groups/${selectedGroupId}/messages`,
+                  {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ messageId: msg.id, content: newContent }),
+                  }
+                );
+                if (!res.ok) throw new Error("Failed to edit");
+                const data = await res.json();
+                updateMessage(msg.id, { content: newContent, editedAt: data.updatedAt });
+              }}
+            />
+          ))
         )}
       </div>
 

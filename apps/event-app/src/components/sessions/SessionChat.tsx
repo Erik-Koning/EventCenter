@@ -6,6 +6,7 @@ import { useSessionChat } from "@/hooks/useSessionChat";
 import { ChatMessage } from "@/components/networking/ChatMessage";
 import { SiaMentionPopover } from "@/components/chat/SiaMentionPopover";
 import { useSiaMention } from "@/hooks/useSiaMention";
+import { authClient } from "@/lib/auth-client";
 
 interface SessionChatProps {
   sessionId: string;
@@ -16,7 +17,9 @@ const MIN_HEIGHT = 150;
 const MAX_HEIGHT = 600;
 
 export function SessionChat({ sessionId }: SessionChatProps) {
-  const { messages, loading, sendMessage } = useSessionChat(sessionId);
+  const { messages, loading, sendMessage, updateMessage } = useSessionChat(sessionId);
+  const { data: session } = authClient.useSession();
+  const currentUserId = session?.user?.id;
   const [input, setInput] = useState("");
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
 
@@ -86,7 +89,7 @@ export function SessionChat({ sessionId }: SessionChatProps) {
   );
 
   return (
-    <div className="mt-8 flex w-full items-end" style={{ height: MAX_HEIGHT }}>
+    <div className="mt-auto pt-8 flex w-full">
       <div
         className="relative flex w-full flex-col overflow-hidden rounded-xl border bg-background"
         style={{ height }}
@@ -133,6 +136,19 @@ export function SessionChat({ sessionId }: SessionChatProps) {
                   content: msg.content,
                   isAiSummary: msg.isAiSummary,
                   createdAt: msg.createdAt,
+                  editedAt: msg.editedAt,
+                  userId: msg.userId,
+                }}
+                currentUserId={currentUserId}
+                onEdit={async (newContent) => {
+                  const res = await fetch(`/api/sessions/${sessionId}/chat`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ messageId: msg.id, content: newContent }),
+                  });
+                  if (!res.ok) throw new Error("Failed to edit");
+                  const data = await res.json();
+                  updateMessage(msg.id, newContent, data.updatedAt);
                 }}
               />
             ))

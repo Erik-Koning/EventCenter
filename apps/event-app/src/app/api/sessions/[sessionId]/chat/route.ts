@@ -4,12 +4,17 @@ import { eq, and, gt, asc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { sessionComments, users } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
-import { handleApiError } from "@/lib/api-error";
+import { handleApiError, commonErrors } from "@/lib/api-error";
 import { createId } from "@/lib/utils";
 import { broadcastToGroup } from "@/lib/pubsub";
 import { onSessionCommentCreated } from "@/lib/sessions/on-session-comment-hooks";
 
 const sendMessageSchema = z.object({
+  content: z.string().min(1).max(5000),
+});
+
+const editMessageSchema = z.object({
+  messageId: z.string().min(1),
   content: z.string().min(1).max(5000),
 });
 
@@ -42,6 +47,7 @@ export async function GET(
         content: sessionComments.content,
         isAiSummary: sessionComments.isAiSummary,
         createdAt: sessionComments.createdAt,
+        updatedAt: sessionComments.updatedAt,
       })
       .from(sessionComments)
       .leftJoin(users, eq(sessionComments.userId, users.id))
@@ -96,5 +102,51 @@ export async function POST(
     );
   } catch (error) {
     return handleApiError(error, "sessions/[sessionId]/chat:POST");
+  }
+}
+
+/**
+ * PUT /api/sessions/[sessionId]/chat - Edit own comment
+ */
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+  const authResult = await requireAuth();
+  if (!authResult.success) return authResult.response;
+  const { user } = authResult;
+  const { sessionId } = await params;
+
+  try {
+    const body = await request.json();
+    const validated = editMessageSchema.parse(body);
+
+    // Verify message exists, belongs to user, and is not AI summary
+    const existing = await db.query.sessionComments.findFirst({
+      where: and(
+        eq(sessionComments.id, validated.messageId),
+        eq(sessionComments.sessionId, sessionId)
+      ),
+    });
+
+    if (!existing) return commonErrors.notFound();
+    if (existing.userId !== user.id) return commonErrors.forbidden();
+    if (existing.isAiSummary) return commonErrors.forbidden();
+
+    const now = new Date();
+    const [updated] = await db
+      .update(sessionComments)
+      .set({ content: validated.content, updatedAt: now })
+      .where(eq(sessionComments.id, validated.messageId))
+      .returning();
+
+    await broadcastToGroup(`session:${sessionId}`, {
+      type: "message:edited",
+      data: { id: updated.id, content: updated.content, updatedAt: updated.updatedAt },
+    });
+
+    return NextResponse.json({ ...updated, userName: user.name });
+  } catch (error) {
+    return handleApiError(error, "sessions/[sessionId]/chat:PUT");
   }
 }

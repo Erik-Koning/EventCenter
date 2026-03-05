@@ -61,6 +61,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { eventId } = await params;
     const body = await request.json();
     const date = body.date as string;
+    const force = body.force === true;
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return commonErrors.badRequest("Invalid or missing 'date' (YYYY-MM-DD)");
@@ -91,7 +92,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (existing === "loading") {
       return NextResponse.json({ status: "generating" }, { status: 202 });
     }
-    if (existing) {
+    if (existing && !force) {
       return NextResponse.json({ status: "ready", recap: existing });
     }
 

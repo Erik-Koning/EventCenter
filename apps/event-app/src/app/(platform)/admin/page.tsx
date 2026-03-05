@@ -7,9 +7,10 @@ import { AdminEventSelector } from "@/components/admin/AdminEventSelector";
 import { EventsTab } from "@/components/admin/EventsTab";
 import { SessionsTab } from "@/components/admin/SessionsTab";
 import { UsersTab } from "@/components/admin/UsersTab";
+import { NetworkingTab } from "@/components/admin/NetworkingTab";
 
-const TAB_NAMES = ["Events", "Sessions", "Attendees"];
-const TAB_COMPONENTS = [EventsTab, SessionsTab, UsersTab];
+const TAB_NAMES = ["Events", "Sessions", "Attendees", "Networking Groups"];
+const TAB_COMPONENTS = [EventsTab, SessionsTab, UsersTab, NetworkingTab];
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState(0);

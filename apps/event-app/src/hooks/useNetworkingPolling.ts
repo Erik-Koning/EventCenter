@@ -18,6 +18,7 @@ export function useNetworkingPolling() {
   const setGroups = useNetworkingStore((s) => s.setGroups);
   const setGroupsLoading = useNetworkingStore((s) => s.setGroupsLoading);
   const appendMessages = useNetworkingStore((s) => s.appendMessages);
+  const updateMessage = useNetworkingStore((s) => s.updateMessage);
   const setMessages = useNetworkingStore((s) => s.setMessages);
   const setMessagesLoading = useNetworkingStore((s) => s.setMessagesLoading);
   const setMindMapNodes = useNetworkingStore((s) => s.setMindMapNodes);
@@ -87,6 +88,11 @@ export function useNetworkingPolling() {
           appendMessages([msg]);
           break;
         }
+        case "message:edited": {
+          const { id, content, updatedAt } = data as { id: string; content: string; updatedAt: string };
+          updateMessage(id, { content, editedAt: updatedAt });
+          break;
+        }
         case "insights:updated": {
           const { insights } = data as unknown as { insights: { title: string; description: string }[] };
           if (insights && selectedGroupId) {
@@ -125,6 +131,7 @@ export function useNetworkingPolling() {
     },
     [
       appendMessages,
+      updateMessage,
       addMindMapNode,
       updateMindMapNode,
       removeMindMapNode,

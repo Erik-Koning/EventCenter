@@ -154,8 +154,15 @@ export function createEventTools(eventId: string): Tool[] {
         conditions.push(eq(eventSessions.date, date));
       }
       if (keyword) {
+        // Use full-text search for stemming (e.g. "operations" matches "operational")
+        // with ILIKE fallback for partial/exact matches
         conditions.push(
-          sql`(${eventSessions.title} ILIKE ${`%${keyword}%`} OR ${eventSessions.description} ILIKE ${`%${keyword}%`})`,
+          sql`(
+            to_tsvector('english', coalesce(${eventSessions.title}, '') || ' ' || coalesce(${eventSessions.description}, ''))
+            @@ plainto_tsquery('english', ${keyword})
+            OR ${eventSessions.title} ILIKE ${`%${keyword}%`}
+            OR ${eventSessions.description} ILIKE ${`%${keyword}%`}
+          )`,
         );
       }
 

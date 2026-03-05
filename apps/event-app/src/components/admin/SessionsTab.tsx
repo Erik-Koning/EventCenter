@@ -12,7 +12,7 @@ import {
 } from "@common/components/ui/dialog";
 import { HoverCardClickable } from "@common/components/inputs/HoverCardClickable";
 import { Badge } from "@common/components/ui/badge";
-import { Plus, MoreVertical, Pencil, Trash2, FileText, Loader2, Download, Send, CheckCheck } from "lucide-react";
+import { Plus, MoreVertical, Pencil, Trash2, FileText, Loader2, Download, Send, CheckCheck, RefreshCw } from "lucide-react";
 import { NewspaperContent } from "@/components/agenda/DayRecapNewspaper";
 import type { DayRecapData } from "@/data/recap-types";
 
@@ -199,6 +199,30 @@ export function SessionsTab() {
     }, 2000);
   }, []);
 
+  // Auto-fetch existing recap when event+date are selected
+  useEffect(() => {
+    if (!reportEventId || !reportDate) return;
+    setRecapStatus("generating");
+    setRecapData(null);
+    (async () => {
+      try {
+        const res = await fetch(`/api/events/${reportEventId}/recap?date=${reportDate}`);
+        if (!res.ok) { setRecapStatus("idle"); return; }
+        const data = await res.json();
+        if (data.status === "ready") {
+          setRecapData(data.recap);
+          setRecapStatus("ready");
+        } else if (data.status === "loading") {
+          pollRecap(reportEventId, reportDate);
+        } else {
+          setRecapStatus("idle");
+        }
+      } catch {
+        setRecapStatus("idle");
+      }
+    })();
+  }, [reportEventId, reportDate, pollRecap]);
+
   const handleGenerate = async () => {
     if (!reportEventId || !reportDate) return;
     setRecapStatus("generating");
@@ -217,6 +241,32 @@ export function SessionsTab() {
         setRecapStatus("ready");
       } else {
         // generating — poll for result
+        pollRecap(reportEventId, reportDate);
+      }
+    } catch {
+      setRecapStatus("error");
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!reportEventId || !reportDate) return;
+    setRecapStatus("generating");
+    setRecapData(null);
+    setEmailStatus("idle");
+    setEmailSentCount(0);
+
+    try {
+      const res = await fetch(`/api/events/${reportEventId}/recap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: reportDate, force: true }),
+      });
+      const data = await res.json();
+
+      if (data.status === "ready") {
+        setRecapData(data.recap);
+        setRecapStatus("ready");
+      } else {
         pollRecap(reportEventId, reportDate);
       }
     } catch {
@@ -524,24 +574,37 @@ export function SessionsTab() {
           </div>
 
           <div className="flex gap-2">
-            <Button
-              onClick={handleGenerate}
-              disabled={!reportEventId || !reportDate || recapStatus === "generating"}
-              size="sm"
-            >
-              {recapStatus === "generating" ? (
-                <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                "Generate"
-              )}
-            </Button>
-            {recapData && (
-              <Button onClick={handleDownload} size="sm" variant="outline">
-                <Download className="mr-1 h-4 w-4" /> Download / Print
+            {recapStatus !== "ready" && (
+              <Button
+                onClick={handleGenerate}
+                disabled={!reportEventId || !reportDate || recapStatus === "generating"}
+                size="sm"
+              >
+                {recapStatus === "generating" ? (
+                  <>
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  "Generate"
+                )}
               </Button>
+            )}
+            {recapData && (
+              <>
+                <Button onClick={handleDownload} size="sm" variant="outline">
+                  <Download className="mr-1 h-4 w-4" /> Download / Print
+                </Button>
+                <Button
+                  onClick={handleRegenerate}
+                  disabled={recapStatus === "generating"}
+                  size="sm"
+                  variant="outline"
+                >
+                  <RefreshCw className={`mr-1 h-4 w-4 ${recapStatus === "generating" ? "animate-spin" : ""}`} />
+                  Regenerate
+                </Button>
+              </>
             )}
           </div>
 

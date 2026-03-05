@@ -86,7 +86,7 @@ export default function SessionDetailPage({
   })();
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto flex max-w-4xl flex-col min-h-[calc(100vh-4rem)]">
       {/* Back link */}
       <Link
         href={back.href}
