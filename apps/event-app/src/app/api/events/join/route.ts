@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { users, events, eventAttendees } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
+import { createId } from "@/lib/utils";
 
 const joinSchema = z.object({
   eventId: z.string().min(1),
@@ -30,30 +31,47 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if on the guestlist (eventAttendees)
-    const enrollment = await db.query.eventAttendees.findFirst({
+    // Check if already enrolled, otherwise auto-enroll
+    let enrollment = await db.query.eventAttendees.findFirst({
       where: and(
         eq(eventAttendees.eventId, eventId),
         eq(eventAttendees.userId, user.id)
       ),
     });
+
     if (!enrollment) {
-      return NextResponse.json(
-        { message: "You are not on the guestlist for this event", error: "FORBIDDEN" },
-        { status: 403 }
-      );
+      // Auto-enroll the user as a regular attendee
+      const [created] = await db
+        .insert(eventAttendees)
+        .values({
+          id: createId(),
+          eventId,
+          userId: user.id,
+          role: "user",
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      enrollment = created ?? await db.query.eventAttendees.findFirst({
+        where: and(
+          eq(eventAttendees.eventId, eventId),
+          eq(eventAttendees.userId, user.id)
+        ),
+      });
     }
+
+    const role = enrollment?.role ?? "user";
 
     // Set current event and role atomically
     await db
       .update(users)
       .set({
         currentEventId: eventId,
-        role: enrollment.role,
+        role,
       })
       .where(eq(users.id, user.id));
 
-    return NextResponse.json({ event, role: enrollment.role });
+    return NextResponse.json({ event, role });
   } catch (error) {
     return handleApiError(error, "events/join:POST");
   }

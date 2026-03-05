@@ -44,13 +44,15 @@ export function NoEventsView() {
           body: JSON.stringify({ eventId }),
         });
         if (res.ok) {
-          await fetchUserEvents();
+          // Force full page reload to refresh all event-dependent data
+          window.location.reload();
+          return;
         }
       } finally {
         setJoiningEventId(null);
       }
     },
-    [fetchUserEvents]
+    []
   );
 
   return (

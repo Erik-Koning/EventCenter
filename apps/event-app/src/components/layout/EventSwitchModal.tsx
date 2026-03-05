@@ -32,7 +32,7 @@ export function EventSwitchModal() {
           <Button variant="outline" onClick={dismiss}>
             Keep Current
           </Button>
-          <Button onClick={() => switchEvent(pendingSwitch.id)}>
+          <Button onClick={async () => { await switchEvent(pendingSwitch.id); window.location.reload(); }}>
             Switch Event
           </Button>
         </DialogFooter>

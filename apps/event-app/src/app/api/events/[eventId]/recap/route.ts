@@ -85,12 +85,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       return commonErrors.badRequest("Date is outside event range");
     }
 
-    // Validate date is in the past (or today)
-    const today = new Date().toISOString().split("T")[0];
-    if (date > today) {
-      return commonErrors.badRequest("Cannot generate recap for a future date");
-    }
-
     // Check if recap already exists
     const recaps = (event.recaps ?? {}) as Record<string, "loading" | DayRecapData>;
     const existing = recaps[date];

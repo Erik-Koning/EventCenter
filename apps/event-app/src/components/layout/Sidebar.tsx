@@ -87,13 +87,14 @@ export function Sidebar() {
         body: JSON.stringify({ eventId }),
       });
       if (res.ok) {
-        await fetchUserEvents();
-        setEventDropdownOpen(false);
+        // Force full page reload to refresh all event-dependent data
+        window.location.reload();
+        return;
       }
     } finally {
       setJoiningEventId(null);
     }
-  }, [fetchUserEvents]);
+  }, []);
 
   const joinedEventIds = new Set(userEvents.map((e) => e.id));
   const unjoinedEvents = availableEvents.filter((e) => !joinedEventIds.has(e.id));
@@ -243,9 +244,9 @@ export function Sidebar() {
                   .map((event) => (
                     <button
                       key={event.id}
-                      onClick={() => {
-                        switchEvent(event.id);
-                        setEventDropdownOpen(false);
+                      onClick={async () => {
+                        await switchEvent(event.id);
+                        window.location.reload();
                       }}
                       className="flex w-full flex-col px-3 py-2 text-left transition-colors hover:bg-muted"
                     >
