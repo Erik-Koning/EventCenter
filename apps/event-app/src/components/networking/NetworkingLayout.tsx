@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNetworkingStore } from "@/lib/stores/networkingStore";
@@ -14,20 +14,56 @@ export function NetworkingLayout() {
   const router = useRouter();
   const previewGroupId = useNetworkingStore((s) => s.previewGroupId);
   const setPreviewGroupId = useNetworkingStore((s) => s.setPreviewGroupId);
+  const updateGroupMemberCount = useNetworkingStore((s) => s.updateGroupMemberCount);
+  const groups = useNetworkingStore((s) => s.groups);
+  const groupsLoading = useNetworkingStore((s) => s.groupsLoading);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const [joining, setJoining] = useState(false);
 
   useNetworkingPolling();
 
+  // Auto-select first group on desktop once groups load
+  useEffect(() => {
+    if (isDesktop && !previewGroupId && groups.length > 0 && !groupsLoading) {
+      setPreviewGroupId(groups[0].id);
+    }
+  }, [isDesktop, previewGroupId, groups, groupsLoading, setPreviewGroupId]);
+
   const handleGroupClick = useCallback(
-    (groupId: string) => {
-      if (!isDesktop) {
+    async (groupId: string) => {
+      if (joining) return;
+      setJoining(true);
+      try {
+        const res = await fetch(`/api/networking/groups/${groupId}/members`, {
+          method: "POST",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.memberCount != null) {
+            updateGroupMemberCount(groupId, data.memberCount);
+          }
+        }
+        // Navigate whether join succeeded or user was already a member
+        setPreviewGroupId(null);
         router.push(`/networking/${groupId}`);
-        return;
+      } finally {
+        setJoining(false);
       }
-      setPreviewGroupId(previewGroupId === groupId ? null : groupId);
     },
-    [isDesktop, router, setPreviewGroupId, previewGroupId]
+    [joining, router, setPreviewGroupId, updateGroupMemberCount]
   );
+
+  const handleGroupHoverStart = useCallback(
+    (groupId: string) => {
+      if (!isDesktop) return;
+      setPreviewGroupId(groupId);
+    },
+    [isDesktop, setPreviewGroupId]
+  );
+
+  const handleGroupHoverEnd = useCallback(() => {
+    // Don't close immediately — let the user move to the panel
+  }, []);
 
   const showPanel = !!previewGroupId;
 
@@ -40,7 +76,11 @@ export function NetworkingLayout() {
           showPanel ? "hidden lg:block lg:flex-1" : "w-full"
         )}
       >
-        <NetworkingGroupList onGroupClick={handleGroupClick} />
+        <NetworkingGroupList
+          onGroupClick={handleGroupClick}
+          onGroupHoverStart={handleGroupHoverStart}
+          onGroupHoverEnd={handleGroupHoverEnd}
+        />
       </div>
 
       {/* Inline preview panel — sits beside, no overlay */}

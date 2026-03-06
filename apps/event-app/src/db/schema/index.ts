@@ -34,7 +34,7 @@ export {
 export { events, eventAttendees } from "./events";
 
 // Documents
-export { sessionDocuments } from "./documents";
+export { documentCategoryEnum, sessionDocuments } from "./documents";
 
 // All relations
 export * from "./relations";

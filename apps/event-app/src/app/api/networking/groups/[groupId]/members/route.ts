@@ -4,11 +4,40 @@ import { db } from "@/lib/db";
 import {
   networkingGroups,
   networkingGroupMembers,
+  users,
 } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError, commonErrors } from "@/lib/api-error";
 import { createId } from "@/lib/utils";
 import { broadcastToGroup } from "@/lib/pubsub";
+
+/**
+ * GET /api/networking/groups/[groupId]/members - List group members
+ */
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ groupId: string }> }
+) {
+  const authResult = await requireAuth();
+  if (!authResult.success) return authResult.response;
+  const { groupId } = await params;
+
+  try {
+    const members = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        initials: users.initials,
+      })
+      .from(networkingGroupMembers)
+      .innerJoin(users, eq(networkingGroupMembers.userId, users.id))
+      .where(eq(networkingGroupMembers.groupId, groupId));
+
+    return NextResponse.json(members);
+  } catch (error) {
+    return handleApiError(error, "networking/groups/[groupId]/members:GET");
+  }
+}
 
 /**
  * POST /api/networking/groups/[groupId]/members - Join group

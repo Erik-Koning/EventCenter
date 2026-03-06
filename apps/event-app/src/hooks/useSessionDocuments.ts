@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
+export type DocumentCategory = "speaker_document" | "transcript_note";
+
 export interface SessionDocument {
   id: string;
   sessionId: string;
@@ -11,19 +13,23 @@ export interface SessionDocument {
   contentType: string;
   blobUrl: string;
   sasUrl: string;
+  category: DocumentCategory;
   uploaderName: string | null;
   createdAt: string;
 }
 
-function documentsKey(sessionId: string) {
-  return ["session-documents", sessionId] as const;
+function documentsKey(sessionId: string, category?: DocumentCategory) {
+  return ["session-documents", sessionId, category ?? "all"] as const;
 }
 
-export function useSessionDocuments(sessionId: string) {
+export function useSessionDocuments(sessionId: string, category?: DocumentCategory) {
   const query = useQuery({
-    queryKey: documentsKey(sessionId),
+    queryKey: documentsKey(sessionId, category),
     queryFn: async (): Promise<SessionDocument[]> => {
-      const res = await fetch(`/api/sessions/${sessionId}/documents`);
+      const url = category
+        ? `/api/sessions/${sessionId}/documents?category=${category}`
+        : `/api/sessions/${sessionId}/documents`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },
@@ -37,13 +43,16 @@ export function useSessionDocuments(sessionId: string) {
   };
 }
 
-export function useUploadDocument(sessionId: string) {
+export function useUploadDocument(sessionId: string, category?: DocumentCategory) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
+      if (category) {
+        formData.append("category", category);
+      }
 
       const res = await fetch(`/api/sessions/${sessionId}/documents`, {
         method: "POST",
@@ -57,12 +66,12 @@ export function useUploadDocument(sessionId: string) {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: documentsKey(sessionId) });
+      queryClient.invalidateQueries({ queryKey: documentsKey(sessionId, category) });
     },
   });
 }
 
-export function useDeleteDocument(sessionId: string) {
+export function useDeleteDocument(sessionId: string, category?: DocumentCategory) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -80,7 +89,7 @@ export function useDeleteDocument(sessionId: string) {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: documentsKey(sessionId) });
+      queryClient.invalidateQueries({ queryKey: documentsKey(sessionId, category) });
     },
   });
 }

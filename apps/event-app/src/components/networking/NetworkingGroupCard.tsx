@@ -20,6 +20,8 @@ interface NetworkingGroupCardProps {
   isSelected: boolean;
   isAdmin?: boolean;
   onSelect: () => void;
+  onHoverStart?: () => void;
+  onHoverEnd?: () => void;
 }
 
 export function NetworkingGroupCard({
@@ -27,6 +29,8 @@ export function NetworkingGroupCard({
   isSelected,
   isAdmin,
   onSelect,
+  onHoverStart,
+  onHoverEnd,
 }: NetworkingGroupCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -51,6 +55,8 @@ export function NetworkingGroupCard({
     <>
       <button
         onClick={onSelect}
+        onMouseEnter={onHoverStart}
+        onMouseLeave={onHoverEnd}
         className={cn(
           "group/card relative flex w-[220px] flex-col rounded-xl border border-border bg-white p-4 text-left transition-all duration-150",
           isSelected

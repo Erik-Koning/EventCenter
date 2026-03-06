@@ -35,6 +35,15 @@ export function AttendeeGrid({ search }: AttendeeGridProps) {
     return attendees.filter((a) => a.name.toLowerCase().includes(q));
   }, [search, attendees]);
 
+  const filteredAttendees = useMemo(
+    () => filtered.filter((a) => !a.isSpeaker),
+    [filtered]
+  );
+  const filteredSpeakers = useMemo(
+    () => filtered.filter((a) => a.isSpeaker),
+    [filtered]
+  );
+
   const handleAttendeeClick = useCallback(
     (attendeeId: string) => {
       const speaker = speakerById.get(attendeeId);
@@ -49,20 +58,43 @@ export function AttendeeGrid({ search }: AttendeeGridProps) {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((attendee) => (
-          <AttendeeCard
-            key={attendee.id}
-            attendee={attendee}
-            onClick={attendee.isSpeaker ? () => handleAttendeeClick(attendee.id) : undefined}
-          />
-        ))}
-        {filtered.length === 0 && (
-          <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
-            No attendees found matching &ldquo;{search}&rdquo;
-          </p>
-        )}
-      </div>
+      {filtered.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No attendees found matching &ldquo;{search}&rdquo;
+        </p>
+      ) : (
+        <div className="space-y-6">
+          {filteredAttendees.length > 0 && (
+            <section>
+              <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Attendees
+              </h2>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredAttendees.map((attendee) => (
+                  <AttendeeCard key={attendee.id} attendee={attendee} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {filteredSpeakers.length > 0 && (
+            <section>
+              <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Speakers
+              </h2>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredSpeakers.map((attendee) => (
+                  <AttendeeCard
+                    key={attendee.id}
+                    attendee={attendee}
+                    onClick={() => handleAttendeeClick(attendee.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
 
       {selectedSpeaker && (
         <SpeakerPopup

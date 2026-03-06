@@ -20,6 +20,8 @@ export interface Session {
   tags: string[] | null;
   eventId: string | null;
   speakers: Speaker[];
+  upvoteCount?: number;
+  userUpvoted?: boolean;
   isUserSubmitted?: boolean;
 }
 

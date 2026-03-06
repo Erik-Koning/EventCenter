@@ -7,9 +7,11 @@ import { NetworkingSkeleton } from "@/components/skeletons/NetworkingSkeleton";
 
 interface NetworkingGroupListProps {
   onGroupClick?: (groupId: string) => void;
+  onGroupHoverStart?: (groupId: string) => void;
+  onGroupHoverEnd?: () => void;
 }
 
-export function NetworkingGroupList({ onGroupClick }: NetworkingGroupListProps) {
+export function NetworkingGroupList({ onGroupClick, onGroupHoverStart, onGroupHoverEnd }: NetworkingGroupListProps) {
   const groups = useNetworkingStore((s) => s.groups);
   const groupsLoading = useNetworkingStore((s) => s.groupsLoading);
   const previewGroupId = useNetworkingStore((s) => s.previewGroupId);
@@ -40,6 +42,8 @@ export function NetworkingGroupList({ onGroupClick }: NetworkingGroupListProps) 
           isSelected={group.id === previewGroupId}
           isAdmin={isAdmin}
           onSelect={() => onGroupClick?.(group.id)}
+          onHoverStart={() => onGroupHoverStart?.(group.id)}
+          onHoverEnd={onGroupHoverEnd}
         />
       ))}
     </div>

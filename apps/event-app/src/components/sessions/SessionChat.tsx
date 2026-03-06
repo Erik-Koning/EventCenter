@@ -25,6 +25,7 @@ export function SessionChat({ sessionId }: SessionChatProps) {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
 
   const sia = useSiaMention(input, inputRef.current);
@@ -48,6 +49,8 @@ export function SessionChat({ sessionId }: SessionChatProps) {
         setHeight(
           Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, dragRef.current.startH + dy))
         );
+        // Keep the bottom (input area) visible as the box grows upward
+        containerRef.current?.scrollIntoView({ block: "end" });
       };
 
       const onUp = () => {
@@ -89,7 +92,7 @@ export function SessionChat({ sessionId }: SessionChatProps) {
   );
 
   return (
-    <div className="mt-auto pt-8 flex w-full">
+    <div ref={containerRef} className="mt-auto pt-8 pb-6 flex w-full">
       <div
         className="relative flex w-full flex-col overflow-hidden rounded-xl border bg-background"
         style={{ height }}

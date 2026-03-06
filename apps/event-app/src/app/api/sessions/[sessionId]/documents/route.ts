@@ -30,6 +30,13 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const { sessionId } = await context.params;
+    const { searchParams } = new URL(request.url);
+    const category = searchParams.get("category") as "speaker_document" | "transcript_note" | null;
+
+    const conditions = [eq(sessionDocuments.sessionId, sessionId)];
+    if (category) {
+      conditions.push(eq(sessionDocuments.category, category));
+    }
 
     const docs = await db
       .select({
@@ -40,12 +47,13 @@ export async function GET(request: Request, context: RouteContext) {
         fileSize: sessionDocuments.fileSize,
         contentType: sessionDocuments.contentType,
         blobUrl: sessionDocuments.blobUrl,
+        category: sessionDocuments.category,
         createdAt: sessionDocuments.createdAt,
         uploaderName: users.name,
       })
       .from(sessionDocuments)
       .leftJoin(users, eq(users.id, sessionDocuments.uploadedById))
-      .where(eq(sessionDocuments.sessionId, sessionId))
+      .where(and(...conditions))
       .orderBy(sessionDocuments.createdAt);
 
     // Generate SAS URLs for each document
@@ -74,8 +82,19 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const { sessionId } = await context.params;
 
-    // Check permission: must be a speaker for this session or admin
-    if (user.role !== "admin") {
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    const category = (formData.get("category") as string) || "speaker_document";
+
+    if (category !== "speaker_document" && category !== "transcript_note") {
+      return NextResponse.json(
+        { message: "Invalid category", error: "BAD_REQUEST" },
+        { status: 400 }
+      );
+    }
+
+    // Permission: speaker_document → speakers + admins only; transcript_note → any authenticated user
+    if (category === "speaker_document" && user.role !== "admin") {
       const isSpeaker = await db.query.sessionSpeakers.findFirst({
         where: and(
           eq(sessionSpeakers.sessionId, sessionId),
@@ -84,14 +103,11 @@ export async function POST(request: Request, context: RouteContext) {
       });
       if (!isSpeaker) {
         return NextResponse.json(
-          { message: "Only speakers or admins can upload documents", error: "FORBIDDEN" },
+          { message: "Only speakers or admins can upload speaker documents", error: "FORBIDDEN" },
           { status: 403 }
         );
       }
     }
-
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
 
     if (!file) {
       return NextResponse.json(
@@ -128,6 +144,7 @@ export async function POST(request: Request, context: RouteContext) {
         fileSize: file.size,
         contentType: file.type,
         blobUrl,
+        category,
       })
       .returning();
 
