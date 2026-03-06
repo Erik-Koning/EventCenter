@@ -51,6 +51,9 @@ interface NetworkingState {
   previewGroupId: string | null;
   previewIsMember: boolean;
 
+  // Chat draft (set externally, consumed by NetworkingChat)
+  chatDraft: string | null;
+
   // Connection state
   wsConnected: boolean;
 
@@ -81,6 +84,7 @@ interface NetworkingState {
   updateGroupTopWords: (groupId: string, topWords: string[]) => void;
   updateGroupInsights: (groupId: string, insights: Insight[]) => void;
   updateGroupMemberCount: (groupId: string, memberCount: number) => void;
+  setChatDraft: (draft: string | null) => void;
 }
 
 export const useNetworkingStore = create<NetworkingState>((set) => ({
@@ -91,6 +95,7 @@ export const useNetworkingStore = create<NetworkingState>((set) => ({
   isMember: false,
   previewGroupId: null,
   previewIsMember: false,
+  chatDraft: null,
   wsConnected: false,
   groupsLoading: false,
   messagesLoading: false,
@@ -183,4 +188,6 @@ export const useNetworkingStore = create<NetworkingState>((set) => ({
         g.id === groupId ? { ...g, memberCount } : g
       ),
     })),
+
+  setChatDraft: (draft) => set({ chatDraft: draft }),
 }));

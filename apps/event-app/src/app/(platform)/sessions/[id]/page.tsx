@@ -171,10 +171,20 @@ export default function SessionDetailPage({
         </p>
       </div>
 
-      {/* Documents */}
+      {/* Speaker Documents */}
       <SessionDocuments
         sessionId={id}
         speakerUserIds={session.speakers.map((s) => s.id)}
+        category="speaker_document"
+        title="Documents"
+      />
+
+      {/* Transcripts / Notes */}
+      <SessionDocuments
+        sessionId={id}
+        speakerUserIds={session.speakers.map((s) => s.id)}
+        category="transcript_note"
+        title="Transcripts / Notes"
       />
 
       {/* Chat */}

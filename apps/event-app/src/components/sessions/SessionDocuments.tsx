@@ -9,7 +9,7 @@ import {
 } from "@/hooks/useSessionDocuments";
 import { DocumentViewer } from "./DocumentViewer";
 import { authClient } from "@/lib/auth-client";
-import type { SessionDocument } from "@/hooks/useSessionDocuments";
+import type { SessionDocument, DocumentCategory } from "@/hooks/useSessionDocuments";
 
 const ACCEPT =
   ".pptx,.docx,.xlsx,.pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf";
@@ -23,15 +23,19 @@ function formatFileSize(bytes: number): string {
 interface SessionDocumentsProps {
   sessionId: string;
   speakerUserIds: string[];
+  category?: DocumentCategory;
+  title?: string;
 }
 
 export function SessionDocuments({
   sessionId,
   speakerUserIds,
+  category = "speaker_document",
+  title = "Speaker Documents",
 }: SessionDocumentsProps) {
-  const { data: documents, isLoading } = useSessionDocuments(sessionId);
-  const uploadMutation = useUploadDocument(sessionId);
-  const deleteMutation = useDeleteDocument(sessionId);
+  const { data: documents, isLoading } = useSessionDocuments(sessionId, category);
+  const uploadMutation = useUploadDocument(sessionId, category);
+  const deleteMutation = useDeleteDocument(sessionId, category);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeDoc, setActiveDoc] = useState<SessionDocument | null>(null);
 
@@ -41,7 +45,7 @@ export function SessionDocuments({
     ? speakerUserIds.includes(currentUserId)
     : false;
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
-  const canUpload = isSpeaker || isAdmin;
+  const canUpload = category === "transcript_note" ? !!currentUserId : isSpeaker || isAdmin;
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -55,7 +59,7 @@ export function SessionDocuments({
     return (
       <div className="mt-6">
         <h2 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Documents
+          {title}
         </h2>
         <p className="text-sm text-muted-foreground">Loading documents...</p>
       </div>
@@ -68,7 +72,7 @@ export function SessionDocuments({
     <div className="mt-6">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Documents
+          {title}
         </h2>
         {canUpload && (
           <>

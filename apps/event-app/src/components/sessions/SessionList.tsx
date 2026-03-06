@@ -59,6 +59,14 @@ export function SessionList() {
   const { data: sessions, isLoading } = useEventSessions(currentEvent?.id);
   const userSessions = useSessionStore((s) => s.userSessions);
   const upvotes = useSessionStore((s) => s.upvotes);
+  const hydrateUpvotes = useSessionStore((s) => s.hydateUpvotes);
+
+  // Hydrate upvote state from server data
+  useEffect(() => {
+    if (sessions.length > 0) {
+      hydrateUpvotes(sessions);
+    }
+  }, [sessions, hydrateUpvotes]);
 
   // Derive unique sorted dates
   const days = useMemo(() => {

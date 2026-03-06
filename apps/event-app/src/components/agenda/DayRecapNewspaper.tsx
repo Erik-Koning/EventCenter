@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
-  X,
   Users,
   MessageCircle,
   Handshake,
@@ -52,16 +51,16 @@ export function DayRecapNewspaper({
         onClick={onClose}
       />
 
-      {/* Scroll container */}
-      <div className="absolute inset-0 overflow-y-auto p-4 md:p-8">
+      {/* Scroll container — clicks on empty area close the popup */}
+      <div className="absolute inset-0 overflow-y-auto p-4 md:p-8" onClick={onClose}>
         <div
           className="mx-auto max-w-3xl pointer-events-auto animate-in fade-in-0 slide-in-from-bottom-4"
           onClick={(e) => e.stopPropagation()}
         >
           {isLoading && !recap ? (
-            <LoadingSkeleton onClose={onClose} />
+            <LoadingSkeleton />
           ) : recap ? (
-            <NewspaperContent recap={recap} onClose={onClose} />
+            <NewspaperContent recap={recap} />
           ) : null}
         </div>
       </div>
@@ -72,16 +71,10 @@ export function DayRecapNewspaper({
 
 // ─── Loading skeleton ─────────────────────────────────────────
 
-function LoadingSkeleton({ onClose }: { onClose: () => void }) {
+function LoadingSkeleton() {
   return (
     <div className="rounded-2xl border border-border bg-[#faf8f4] shadow-2xl overflow-hidden">
       <div className="px-6 pt-6 pb-4 text-center border-b border-border/50">
-        <button
-          onClick={onClose}
-          className="absolute right-6 top-6 rounded-md p-1 text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
         <div className="flex items-center justify-center gap-3 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
           <span className="text-sm font-medium">Generating your day recap...</span>
@@ -103,24 +96,13 @@ function LoadingSkeleton({ onClose }: { onClose: () => void }) {
 
 export function NewspaperContent({
   recap,
-  onClose,
 }: {
   recap: DayRecapData;
-  onClose?: () => void;
 }) {
   return (
     <div className="rounded-2xl border border-border bg-[#faf8f4] shadow-2xl overflow-hidden">
       {/* ── Masthead ── */}
-      <div className="relative border-b-2 border-foreground/80 px-6 pt-6 pb-4 text-center">
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="absolute right-4 top-4 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-
+      <div className="border-b-2 border-foreground/80 px-6 pt-6 pb-4 text-center">
         <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-1">
           {recap.date}
         </p>
@@ -148,7 +130,7 @@ export function NewspaperContent({
       </div>
 
       <div className="p-6 space-y-8">
-        {/* ── Energy Curve ── */}
+        {/* ── Energy Curve ── }
         {recap.energyCurve.length > 0 && (
           <section>
             <SectionTitle>Energy Pulse</SectionTitle>
@@ -180,7 +162,7 @@ export function NewspaperContent({
               </div>
             )}
           </section>
-        )}
+        )} */}
 
         {/* ── Headlines ── */}
         {recap.headlines.length > 0 && (
@@ -220,7 +202,7 @@ export function NewspaperContent({
         {/* ── Word Cloud ── */}
         {recap.wordCloud.length > 0 && (
           <section>
-            <SectionTitle>Buzz Words</SectionTitle>
+            <SectionTitle>Word Cloud</SectionTitle>
             <div className="mt-3 flex flex-wrap gap-2 justify-center">
               {recap.wordCloud.map((w) => (
                 <span
@@ -267,7 +249,7 @@ export function NewspaperContent({
 
             {recap.mysteries.length > 0 && (
               <section>
-                <SectionTitle>Unsolved Mysteries</SectionTitle>
+                <SectionTitle>Parking Lot</SectionTitle>
                 <div className="mt-3 space-y-2">
                   {recap.mysteries.map((m, i) => (
                     <div

@@ -25,6 +25,8 @@ export function NetworkingChat({ showJoinButton = true }: NetworkingChatProps) {
   const updateGroupTopWords = useNetworkingStore((s) => s.updateGroupTopWords);
   const updateGroupMemberCount = useNetworkingStore((s) => s.updateGroupMemberCount);
   const groups = useNetworkingStore((s) => s.groups);
+  const chatDraft = useNetworkingStore((s) => s.chatDraft);
+  const setChatDraft = useNetworkingStore((s) => s.setChatDraft);
   const hasInsights = (groups.find((g) => g.id === selectedGroupId)?.insights ?? []).length > 0;
 
   const [input, setInput] = useState("");
@@ -58,6 +60,15 @@ export function NetworkingChat({ showJoinButton = true }: NetworkingChatProps) {
     },
     [sia]
   );
+
+  // Pick up chat draft from store (e.g. from member click)
+  useEffect(() => {
+    if (chatDraft !== null) {
+      setInput(chatDraft);
+      setChatDraft(null);
+      chatInputRef.current?.focus();
+    }
+  }, [chatDraft, setChatDraft]);
 
   // Track if user is scrolled to bottom
   const handleScroll = useCallback(() => {

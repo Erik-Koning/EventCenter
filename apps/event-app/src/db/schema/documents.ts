@@ -4,6 +4,7 @@
 
 import {
   pgTable,
+  pgEnum,
   varchar,
   text,
   integer,
@@ -12,6 +13,11 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { eventSessions } from "./sessions";
+
+export const documentCategoryEnum = pgEnum("document_category", [
+  "speaker_document",
+  "transcript_note",
+]);
 
 export const sessionDocuments = pgTable(
   "session_documents",
@@ -27,6 +33,7 @@ export const sessionDocuments = pgTable(
     fileSize: integer("file_size").notNull(),
     contentType: varchar("content_type", { length: 255 }).notNull(),
     blobUrl: text("blob_url").notNull(),
+    category: documentCategoryEnum("category").default("speaker_document").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNetworkingPolling } from "@/hooks/useNetworkingPolling";
 import { NetworkingChat } from "./NetworkingChat";
+import { GroupMembersDropdown } from "./GroupMembersDropdown";
 import { AISummaryPanel } from "./AISummaryPanel";
 import { MindMap } from "./MindMap";
 
@@ -11,7 +12,7 @@ type FocusedPanel = "chat" | "summary" | "mindmap" | null;
 export function GroupFullLayout() {
   useNetworkingPolling();
 
-  const [leftWidth, setLeftWidth] = useState(40); // percentage
+  const [leftWidth, setLeftWidth] = useState(66); // percentage
   const [focusedPanel, setFocusedPanel] = useState<FocusedPanel>(null);
   const isDragging = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -79,10 +80,11 @@ export function GroupFullLayout() {
           <div className="h-8 w-1 rounded-full bg-border transition-colors hover:bg-primary/40" />
         </div>
 
-        {/* Right: AI Summary + Mind Map */}
+        {/* Right: Members + AI Summary + Mind Map */}
         <div
           className="flex h-full flex-1 flex-col gap-4 overflow-hidden transition-all duration-300"
         >
+          <GroupMembersDropdown />
           <div
             className={`overflow-auto rounded-xl border bg-white p-4 transition-all duration-300 ${focusedPanel === "summary" ? "border-border/60 shadow-md ring-1 ring-black/[0.04]" : "border-border shadow-sm"}`}
             style={{ height: `${summaryHeight}%` }}
@@ -105,6 +107,7 @@ export function GroupFullLayout() {
         <div className="flex-1 overflow-hidden rounded-xl border border-border bg-white">
           <NetworkingChat />
         </div>
+        <GroupMembersDropdown />
         <div className="overflow-auto rounded-xl border border-border bg-white p-4">
           <AISummaryPanel />
         </div>

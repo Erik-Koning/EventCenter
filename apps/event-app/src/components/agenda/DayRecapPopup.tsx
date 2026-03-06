@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, ThumbsUp, Eye, MessageCircle, Clock, LayoutGrid } from "lucide-react";
+import { ThumbsUp, Eye, MessageCircle, Clock, LayoutGrid } from "lucide-react";
 import type { DayRecap } from "@/data/day-recaps";
 
 interface DayRecapPopupProps {
@@ -54,17 +54,9 @@ export function DayRecapPopup({ recap, open, onClose }: DayRecapPopupProps) {
         <div className="pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border border-border bg-white shadow-xl animate-in fade-in-0 zoom-in-95">
           {/* Header */}
           <div className="px-6 pt-6 pb-0">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">
-                Day {recap.day} Recap
-              </h2>
-              <button
-                onClick={onClose}
-                className="rounded-md p-1 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            <h2 className="text-lg font-semibold text-foreground">
+              Day {recap.day} Recap
+            </h2>
             <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <LayoutGrid className="h-3.5 w-3.5" />
