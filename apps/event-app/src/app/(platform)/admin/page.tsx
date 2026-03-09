@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { HoverBarMenuArray } from "@common/components/ui/HoverBarMenuArray";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AdminEventSelector } from "@/components/admin/AdminEventSelector";
@@ -8,12 +7,14 @@ import { EventsTab } from "@/components/admin/EventsTab";
 import { SessionsTab } from "@/components/admin/SessionsTab";
 import { UsersTab } from "@/components/admin/UsersTab";
 import { NetworkingTab } from "@/components/admin/NetworkingTab";
+import { useAdminStore } from "@/lib/stores/adminStore";
 
-const TAB_NAMES = ["Events", "Sessions", "Attendees", "Networking Groups"];
-const TAB_COMPONENTS = [EventsTab, SessionsTab, UsersTab, NetworkingTab];
+const TAB_NAMES = ["Events", "Attendees", "Sessions", "Networking Groups"];
+const TAB_COMPONENTS = [EventsTab, UsersTab, SessionsTab, NetworkingTab];
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState(0);
+  const activeTab = useAdminStore((s) => s.activeTab);
+  const setActiveTab = useAdminStore((s) => s.setActiveTab);
   const ActiveComponent = TAB_COMPONENTS[activeTab];
 
   return (
@@ -27,6 +28,7 @@ export default function AdminPage() {
       <HoverBarMenuArray
         menuBarItemTitles={TAB_NAMES}
         defaultTabIndex={0}
+        tabIndex={activeTab}
         onClick={(_e: any, index: number) => setActiveTab(index)}
         className="mb-6"
         underlineAnimation={false}

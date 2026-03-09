@@ -14,8 +14,11 @@ const inter = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Executive Leadership Offsite 2026",
-  description: "3-day executive offsite event planner",
+  title: "Convene",
+  description: "Hub for your Events and Conventions",
+  icons: {
+    icon: "/scotia_logo.png",
+  }
 };
 
 export default function RootLayout({

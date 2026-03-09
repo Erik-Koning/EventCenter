@@ -10,11 +10,15 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@common/components/ui/dialog";
-import { HoverCardClickable } from "@common/components/inputs/HoverCardClickable";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@common/components/ui/DropdownMenu";
 import { Badge } from "@common/components/ui/badge";
-import { Plus, MoreVertical, Pencil, Trash2, FileText, Loader2, Download, Send, CheckCheck, RefreshCw } from "lucide-react";
+import { Plus, MoreVertical, Pencil, Trash2, FileText, Loader2, Download, Send, CheckCheck, RefreshCw, Upload } from "lucide-react";
 import { NewspaperContent } from "@/components/agenda/DayRecapNewspaper";
 import type { DayRecapData } from "@/data/recap-types";
+import { useAdminStore } from "@/lib/stores/adminStore";
+import { ImportDialog } from "./ImportDialog";
 
 interface Speaker {
   id: string;
@@ -75,6 +79,7 @@ const emptyForm = {
 };
 
 export function SessionsTab() {
+  const managedEventId = useAdminStore((s) => s.managedEventId);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [events, setEvents] = useState<EventOption[]>([]);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
@@ -82,7 +87,6 @@ export function SessionsTab() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Session | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [filterEventId, setFilterEventId] = useState("");
 
   // Report dialog state
   const [reportOpen, setReportOpen] = useState(false);
@@ -95,13 +99,19 @@ export function SessionsTab() {
   const [emailStatus, setEmailStatus] = useState<"idle" | "sending" | "sent">("idle");
   const [emailSentCount, setEmailSentCount] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const fetchData = async () => {
+    if (!managedEventId) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const [sessRes, evRes, spRes] = await Promise.all([
-      fetch(`/api/admin/sessions${filterEventId ? `?eventId=${filterEventId}` : ""}`),
+      fetch(`/api/admin/sessions?eventId=${managedEventId}`),
       fetch("/api/admin/events"),
-      fetch("/api/admin/speakers"),
+      fetch(`/api/admin/speakers?eventId=${managedEventId}`),
     ]);
     if (sessRes.ok) setSessions(await sessRes.json());
     if (evRes.ok) setEvents(await evRes.json());
@@ -109,7 +119,7 @@ export function SessionsTab() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [filterEventId]);
+  useEffect(() => { fetchData(); }, [managedEventId]);
 
   // Clean up polling on unmount
   useEffect(() => {
@@ -120,7 +130,7 @@ export function SessionsTab() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, eventId: managedEventId ?? "" });
     setDialogOpen(true);
   };
 
@@ -344,30 +354,22 @@ export function SessionsTab() {
     printWindow.document.close();
   };
 
+  if (!managedEventId) {
+    return <p className="text-sm text-muted-foreground">Please select an event to manage sessions.</p>;
+  }
+
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Label>Filter by Event:</Label>
-          <select
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            value={filterEventId}
-            onChange={(e) => setFilterEventId(e.target.value)}
-          >
-            <option value="">All</option>
-            {events.map((ev) => (
-              <option key={ev.id} value={ev.id}>{ev.title}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={openReport} size="sm" variant="outline">
-            <FileText className="mr-1 h-4 w-4" /> Generate Report
-          </Button>
-          <Button onClick={openCreate} size="sm">
-            <Plus className="mr-1 h-4 w-4" /> Add Session
-          </Button>
-        </div>
+      <div className="mb-4 flex items-center justify-end gap-2">
+        <Button onClick={openReport} size="sm" variant="outline">
+          <FileText className="mr-1 h-4 w-4" /> Generate Report
+        </Button>
+        <Button onClick={() => setImportOpen(true)} size="sm" variant="outline">
+          <Upload className="mr-1 h-4 w-4" /> Import
+        </Button>
+        <Button onClick={openCreate} size="sm">
+          <Plus className="mr-1 h-4 w-4" /> Add Session
+        </Button>
       </div>
 
       {loading ? (
@@ -399,39 +401,41 @@ export function SessionsTab() {
                   {s.sessionSpeakers.map((ss) => ss.user.name).join(", ") || "—"}
                 </TableCell>
                 <TableCell>
-                  <HoverCardClickable
-                    triggerJSX={
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-muted">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <div className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-muted">
                         <MoreVertical className="h-4 w-4 text-muted-foreground" />
                       </div>
-                    }
-                    side="bottom"
-                    sideOffset={4}
-                    hoverDelay={300}
-                    hoverExitDelay={600}
-                    className="w-40 rounded-lg border border-border bg-white p-1 shadow-lg"
-                  >
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                      onMouseDown={() => openEdit(s)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      Edit
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
-                      onMouseDown={() => handleDelete(s.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </HoverCardClickable>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="bottom" align="end" className="w-40">
+                      <DropdownMenuItem onSelect={() => openEdit(s)}>
+                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                        onClick={() => handleDelete(s.id)}
+                      >
+                        <Trash2 className="mr-2 h-3.5 w-3.5" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
+
+      {/* Import dialog */}
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        type="sessions"
+        eventId={managedEventId}
+        onSuccess={fetchData}
+      />
 
       {/* Session Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -465,11 +469,32 @@ export function SessionsTab() {
               <Label htmlFor="s-desc">Description</Label>
               <Input id="s-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="s-date">Date</Label>
-                <Input id="s-date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="s-date">Day</Label>
+              <select
+                id="s-date"
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+              >
+                <option value="">Select a day</option>
+                {(() => {
+                  const ev = events.find((e) => e.id === form.eventId);
+                  if (!ev?.startDate || !ev?.endDate) return null;
+                  const days: { label: string; value: string }[] = [];
+                  const start = new Date(ev.startDate + "T00:00:00");
+                  const end = new Date(ev.endDate + "T00:00:00");
+                  for (let d = new Date(start), i = 1; d <= end; d.setDate(d.getDate() + 1), i++) {
+                    const iso = d.toISOString().slice(0, 10);
+                    days.push({ label: `Day ${i} — ${iso}`, value: iso });
+                  }
+                  return days.map((day) => (
+                    <option key={day.value} value={day.value}>{day.label}</option>
+                  ));
+                })()}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="s-start">Start Time</Label>
                 <Input id="s-start" type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
@@ -564,20 +589,32 @@ export function SessionsTab() {
               </select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="r-date">Date</Label>
-              <Input
+              <Label htmlFor="r-date">Day</Label>
+              <select
                 id="r-date"
-                type="date"
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
                 value={reportDate}
-                min={selectedEvent?.startDate}
-                max={selectedEvent?.endDate}
                 disabled={!reportEventId}
                 onChange={(e) => {
                   setReportDate(e.target.value);
                   setRecapData(null);
                   setRecapStatus("idle");
                 }}
-              />
+              >
+                <option value="">Select a day</option>
+                {selectedEvent?.startDate && selectedEvent?.endDate && (() => {
+                  const days: { label: string; value: string }[] = [];
+                  const start = new Date(selectedEvent.startDate + "T00:00:00");
+                  const end = new Date(selectedEvent.endDate + "T00:00:00");
+                  for (let d = new Date(start), i = 1; d <= end; d.setDate(d.getDate() + 1), i++) {
+                    const iso = d.toISOString().slice(0, 10);
+                    days.push({ label: `Day ${i} — ${iso}`, value: iso });
+                  }
+                  return days.map((day) => (
+                    <option key={day.value} value={day.value}>{day.label}</option>
+                  ));
+                })()}
+              </select>
             </div>
           </div>
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { eventSessions } from "@/db/schema";
+import { eventAttendees, users } from "@/db/schema";
 import { requireAuth } from "@/lib/authorization";
 import { handleApiError } from "@/lib/api-error";
 
@@ -15,29 +15,27 @@ export async function GET(
   try {
     const { eventId } = await params;
 
-    // Get all sessions for this event, with their speakers
-    const sessions = await db.query.eventSessions.findMany({
-      where: eq(eventSessions.eventId, eventId),
-      with: {
-        sessionSpeakers: {
-          with: {
-            user: true,
-          },
-        },
-      },
-    });
+    // Get speakers from eventAttendees where isSpeaker=true
+    const rows = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        title: users.title,
+        company: users.company,
+        imageUrl: users.imageUrl,
+        initials: users.initials,
+        bio: eventAttendees.bio,
+      })
+      .from(eventAttendees)
+      .innerJoin(users, eq(eventAttendees.userId, users.id))
+      .where(
+        and(
+          eq(eventAttendees.eventId, eventId),
+          eq(eventAttendees.isSpeaker, true)
+        )
+      );
 
-    // Deduplicate speakers
-    const speakerMap = new Map<string, typeof sessions[0]["sessionSpeakers"][0]["user"]>();
-    for (const session of sessions) {
-      for (const ss of session.sessionSpeakers) {
-        if (!speakerMap.has(ss.user.id)) {
-          speakerMap.set(ss.user.id, ss.user);
-        }
-      }
-    }
-
-    return NextResponse.json(Array.from(speakerMap.values()));
+    return NextResponse.json(rows);
   } catch (error) {
     return handleApiError(error, "events/[eventId]/speakers:GET");
   }

@@ -9,6 +9,7 @@ import {
   eventSessions,
   sessionSpeakers,
   sessionUpvotes,
+  eventAttendees,
   users,
 } from "@/db/schema";
 import { searchDiscussions } from "@/lib/chat/search-discussions";
@@ -239,10 +240,17 @@ export function createEventTools(eventId: string): Tool[] {
           name: users.name,
           title: users.title,
           company: users.company,
-          bio: users.bio,
+          bio: eventAttendees.bio,
         })
-        .from(users)
-        .where(and(eq(users.isSpeaker, true), ilike(users.name, `%${name}%`)))
+        .from(eventAttendees)
+        .innerJoin(users, eq(eventAttendees.userId, users.id))
+        .where(
+          and(
+            eq(eventAttendees.eventId, eventId),
+            eq(eventAttendees.isSpeaker, true),
+            ilike(users.name, `%${name}%`)
+          )
+        )
         .limit(5);
 
       if (results.length === 0) {

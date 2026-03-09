@@ -26,6 +26,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
         userId: eventAttendees.userId,
         userName: users.name,
         userTitle: users.title,
+        isSpeaker: eventAttendees.isSpeaker,
+        bio: eventAttendees.bio,
         createdAt: eventAttendees.createdAt,
       })
       .from(eventAttendees)

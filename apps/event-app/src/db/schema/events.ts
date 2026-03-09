@@ -6,6 +6,7 @@ import {
   pgTable,
   varchar,
   text,
+  boolean,
   timestamp,
   date,
   jsonb,
@@ -52,7 +53,8 @@ export const eventAttendees = pgTable(
     userId: varchar("user_id", { length: 255 })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: varchar("role", { length: 50 }).default("user").notNull(),
+    isSpeaker: boolean("is_speaker").default(false).notNull(),
+    bio: text("bio"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

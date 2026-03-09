@@ -23,8 +23,12 @@ export async function GET(
     });
 
     const attendeesList = enrollments
-      .map((e) => e.user)
-      .filter(Boolean);
+      .filter((e) => e.user)
+      .map((e) => ({
+        ...e.user,
+        isSpeaker: e.isSpeaker,
+        bio: e.bio,
+      }));
 
     return NextResponse.json(attendeesList);
   } catch (error) {

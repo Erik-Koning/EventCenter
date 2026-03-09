@@ -28,7 +28,7 @@ export function EventSwitchModal() {
             &ldquo;{currentEvent.title}&rdquo; has ended. Would you like to switch to &ldquo;{pendingSwitch.title}&rdquo;?
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
+        <DialogFooter className="mt-4">
           <Button variant="outline" onClick={dismiss}>
             Keep Current
           </Button>

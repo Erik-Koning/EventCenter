@@ -51,10 +51,10 @@ export async function PUT(request: Request) {
       return commonErrors.forbidden();
     }
 
-    // Update user's current event and role from guestlist atomically
+    // Update user's current event (don't overwrite the user's global role)
     await db
       .update(users)
-      .set({ currentEventId: eventId, role: enrollment.role })
+      .set({ currentEventId: eventId })
       .where(eq(users.id, user.id));
 
     const event = await db.query.events.findFirst({

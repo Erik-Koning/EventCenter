@@ -98,21 +98,21 @@ export async function POST() {
         name: sp.name,
         title: sp.title,
         company: sp.company,
-        bio: sp.bio,
         initials: sp.initials,
-        isSpeaker: true,
         emailVerified: false,
         createdAt: now,
         updatedAt: now,
       }))
     );
 
-    // Enroll speakers in event
+    // Enroll speakers in event with isSpeaker/bio on enrollment
     await db.insert(eventAttendees).values(
       speakerData.map((sp) => ({
         id: createId(),
         eventId,
         userId: sp.id,
+        isSpeaker: true,
+        bio: sp.bio,
       }))
     );
 
@@ -227,7 +227,6 @@ export async function POST() {
         id: createId(),
         eventId,
         userId: user.id,
-        role: "admin",
       })
       .onConflictDoNothing();
 

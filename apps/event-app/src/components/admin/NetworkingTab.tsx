@@ -95,7 +95,7 @@ export function NetworkingTab() {
   };
 
   if (!managedEventId) {
-    return <p className="text-sm text-muted-foreground">Select an event to manage networking groups.</p>;
+    return <p className="text-sm text-muted-foreground">Please select an event to manage networking groups.</p>;
   }
 
   return (

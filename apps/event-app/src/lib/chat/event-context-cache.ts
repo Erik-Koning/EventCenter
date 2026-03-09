@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { eq } from "drizzle-orm";
-import { events, eventSessions } from "@/db/schema";
+import { events, eventSessions, eventAttendees } from "@/db/schema";
 
 export interface EventContext {
   event: {
@@ -57,6 +57,13 @@ export async function getEventContext(eventId: string): Promise<EventContext | n
     },
   });
 
+  // Build a map of userId → bio from eventAttendees for this event
+  const enrollments = await db.query.eventAttendees.findMany({
+    where: eq(eventAttendees.eventId, eventId),
+    columns: { userId: true, bio: true },
+  });
+  const bioMap = new Map(enrollments.map((e) => [e.userId, e.bio]));
+
   const context: EventContext = {
     event: {
       id: event.id,
@@ -81,7 +88,7 @@ export async function getEventContext(eventId: string): Promise<EventContext | n
         name: ss.user.name,
         title: ss.user.title,
         company: ss.user.company,
-        bio: ss.user.bio,
+        bio: bioMap.get(ss.user.id) ?? null,
       })),
     })),
   };

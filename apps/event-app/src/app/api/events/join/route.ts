@@ -47,7 +47,6 @@ export async function POST(request: Request) {
           id: createId(),
           eventId,
           userId: user.id,
-          role: "user",
         })
         .onConflictDoNothing()
         .returning();
@@ -60,18 +59,13 @@ export async function POST(request: Request) {
       });
     }
 
-    const role = enrollment?.role ?? "user";
-
-    // Set current event and role atomically
+    // Set current event (don't overwrite the user's global role)
     await db
       .update(users)
-      .set({
-        currentEventId: eventId,
-        role,
-      })
+      .set({ currentEventId: eventId })
       .where(eq(users.id, user.id));
 
-    return NextResponse.json({ event, role });
+    return NextResponse.json({ event });
   } catch (error) {
     return handleApiError(error, "events/join:POST");
   }

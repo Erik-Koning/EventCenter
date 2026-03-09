@@ -10,8 +10,11 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@common/components/ui/dialog";
-import { HoverCardClickable } from "@common/components/inputs/HoverCardClickable";
-import { Plus, MoreVertical, Pencil, Trash2, Sparkles } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@common/components/ui/DropdownMenu";
+import { Plus, MoreVertical, Pencil, Trash2, Sparkles, Loader2 } from "lucide-react";
+import { useAdminStore } from "@/lib/stores/adminStore";
 
 interface Event {
   id: string;
@@ -22,6 +25,12 @@ interface Event {
   venue: string | null;
   location: string | null;
   createdAt: string;
+}
+
+interface DeleteTarget {
+  event: Event;
+  sessionCount: number;
+  attendeeCount: number;
 }
 
 const emptyForm = {
@@ -36,10 +45,17 @@ const emptyForm = {
 export function EventsTab() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const managedEventId = useAdminStore((s) => s.managedEventId);
+  const setManagedEventId = useAdminStore((s) => s.setManagedEventId);
+  const setActiveTab = useAdminStore((s) => s.setActiveTab);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [editing, setEditing] = useState<Event | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteFetching, setDeleteFetching] = useState(false);
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -70,6 +86,7 @@ export function EventsTab() {
   };
 
   const handleSubmit = async () => {
+    const isCreating = !editing;
     const url = editing ? `/api/admin/events/${editing.id}` : "/api/admin/events";
     const method = editing ? "PUT" : "POST";
     const res = await fetch(url, {
@@ -78,8 +95,13 @@ export function EventsTab() {
       body: JSON.stringify(form),
     });
     if (res.ok) {
+      const data = await res.json();
       setDialogOpen(false);
       fetchEvents();
+      if (isCreating && data.id) {
+        setManagedEventId(data.id);
+        setActiveTab(1); // Switch to Attendees tab
+      }
     }
   };
 
@@ -93,10 +115,37 @@ export function EventsTab() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this event?")) return;
-    const res = await fetch(`/api/admin/events/${id}`, { method: "DELETE" });
-    if (res.ok) fetchEvents();
+  const openDeleteConfirm = async (ev: Event) => {
+    setDeleteFetching(true);
+    setDeleteTarget({ event: ev, sessionCount: 0, attendeeCount: 0 });
+    setDeleteConfirmInput("");
+    try {
+      const res = await fetch(`/api/admin/events/${ev.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDeleteTarget({
+          event: ev,
+          sessionCount: data.sessions?.length ?? 0,
+          attendeeCount: data.eventAttendees?.length ?? 0,
+        });
+      }
+    } finally {
+      setDeleteFetching(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget || deleteConfirmInput !== "DELETE") return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/admin/events/${deleteTarget.event.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setDeleteTarget(null);
+        fetchEvents();
+      }
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   return (
@@ -128,39 +177,36 @@ export function EventsTab() {
           </TableHeader>
           <TableBody>
             {events.map((ev) => (
-              <TableRow key={ev.id}>
+              <TableRow
+                key={ev.id}
+                className={`cursor-pointer ${managedEventId === ev.id ? "bg-primary/[0.04]" : ""}`}
+                onClick={() => { setManagedEventId(ev.id); setActiveTab(1); }}
+              >
                 <TableCell className="font-medium">{ev.title}</TableCell>
                 <TableCell>{ev.startDate}</TableCell>
                 <TableCell>{ev.endDate}</TableCell>
                 <TableCell>{ev.venue || "—"}</TableCell>
-                <TableCell>
-                  <HoverCardClickable
-                    triggerJSX={
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-muted">
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <div className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-muted">
                         <MoreVertical className="h-4 w-4 text-muted-foreground" />
                       </div>
-                    }
-                    side="bottom"
-                    sideOffset={4}
-                    hoverDelay={300}
-                    hoverExitDelay={600}
-                    className="w-40 rounded-lg border border-border bg-white p-1 shadow-lg"
-                  >
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                      onMouseDown={() => openEdit(ev)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      Edit
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
-                      onMouseDown={() => handleDelete(ev.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </HoverCardClickable>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="bottom" align="end" className="w-40">
+                      <DropdownMenuItem onSelect={() => openEdit(ev)}>
+                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                        onSelect={() => openDeleteConfirm(ev)}
+                      >
+                        <Trash2 className="mr-2 h-3.5 w-3.5" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
@@ -209,6 +255,69 @@ export function EventsTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSubmit}>{editing ? "Save" : "Create"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="sm:max-w-md rounded-lg">
+          <DialogHeader>
+            <DialogTitle>Are you sure you want to delete this event?</DialogTitle>
+            <DialogDescription>
+              {deleteFetching ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading event details...
+                </span>
+              ) : (
+                <>
+                  This event has{" "}
+                  <span className="font-semibold text-foreground">
+                    {deleteTarget?.sessionCount ?? 0} session{deleteTarget?.sessionCount === 1 ? "" : "s"}
+                  </span>{" "}
+                  and{" "}
+                  <span className="font-semibold text-foreground">
+                    {deleteTarget?.attendeeCount ?? 0} attendee{deleteTarget?.attendeeCount === 1 ? "" : "s"}
+                  </span>
+                  .
+                </>
+              )}
+            </DialogDescription>
+            <DialogDescription>
+              Deleting this event will remove these sessions, attendees and all associated data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-4">
+            <Label htmlFor="delete-confirm">
+              Type <span className="font-mono font-semibold">DELETE</span> to confirm
+            </Label>
+            <Input
+              id="delete-confirm"
+              value={deleteConfirmInput}
+              onChange={(e) => setDeleteConfirmInput(e.target.value)}
+              placeholder="DELETE"
+              autoComplete="off"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteConfirmInput !== "DELETE" || deleteLoading || deleteFetching}
+            >
+              {deleteLoading ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Event"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

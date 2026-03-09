@@ -10,7 +10,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@common/components/ui/dialog";
-import { HoverCardClickable } from "@common/components/inputs/HoverCardClickable";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+} from "@common/components/ui/DropdownMenu";
 import { Badge } from "@common/components/ui/badge";
 import {
   Plus,
@@ -25,7 +27,10 @@ import {
   Check,
   KeyRound,
   Mail,
+  Upload,
 } from "lucide-react";
+import { useAdminStore } from "@/lib/stores/adminStore";
+import { ImportDialog } from "./ImportDialog";
 
 interface Person {
   id: string;
@@ -52,10 +57,10 @@ const emptyForm = {
   company: "",
   bio: "",
   email: "",
-  password: "",
 };
 
 export function UsersTab() {
+  const managedEventId = useAdminStore((s) => s.managedEventId);
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -66,21 +71,42 @@ export function UsersTab() {
   const [newPassword, setNewPassword] = useState("");
   const [sendingResetEmail, setSendingResetEmail] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
-  const [setPasswordChecked, setSetPasswordChecked] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Person | null>(null);
 
   const fetchPeople = async () => {
+    if (!managedEventId) {
+      setPeople([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const res = await fetch("/api/admin/attendees");
-    if (res.ok) setPeople(await res.json());
+    // Fetch all users with full detail and event attendee list (which includes isSpeaker/bio)
+    const [allRes, enrolledRes] = await Promise.all([
+      fetch("/api/admin/attendees"),
+      fetch(`/api/admin/events/${managedEventId}/attendees`),
+    ]);
+    if (allRes.ok && enrolledRes.ok) {
+      const allUsers: Omit<Person, "isSpeaker" | "bio">[] = await allRes.json();
+      const enrolled: { userId: string; isSpeaker: boolean; bio: string | null }[] = await enrolledRes.json();
+      const enrollmentMap = new Map(enrolled.map((e) => [e.userId, e]));
+      setPeople(
+        allUsers
+          .filter((p) => enrollmentMap.has(p.id))
+          .map((p) => {
+            const enrollment = enrollmentMap.get(p.id)!;
+            return { ...p, isSpeaker: enrollment.isSpeaker, bio: enrollment.bio };
+          })
+      );
+    }
     setLoading(false);
   };
 
-  useEffect(() => { fetchPeople(); }, []);
+  useEffect(() => { fetchPeople(); }, [managedEventId]);
 
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm);
-    setSetPasswordChecked(false);
     setDialogOpen(true);
   };
 
@@ -95,19 +121,17 @@ export function UsersTab() {
       company: p.company ?? "",
       bio: p.bio ?? "",
       email: p.userEmail ?? "",
-      password: "",
     });
-    setSetPasswordChecked(false);
     setDialogOpen(true);
   };
 
   const handleSubmit = async () => {
     const url = editing ? `/api/admin/attendees/${editing.id}` : "/api/admin/attendees";
     const method = editing ? "PUT" : "POST";
-    const { email, password, ...rest } = form;
-    let payload: Record<string, unknown> = rest;
+    const { email, ...rest } = form;
+    let payload: Record<string, unknown> = { ...rest, eventId: managedEventId };
     if (!editing && email) {
-      payload = password ? { ...rest, email, password } : { ...rest, email };
+      payload = { ...rest, email, eventId: managedEventId };
     }
     const res = await fetch(url, {
       method,
@@ -120,17 +144,20 @@ export function UsersTab() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this attendee?")) return;
-    const res = await fetch(`/api/admin/attendees/${id}`, { method: "DELETE" });
-    if (res.ok) fetchPeople();
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/admin/attendees/${deleteTarget.id}?eventId=${managedEventId}`, { method: "DELETE" });
+    if (res.ok) {
+      setDeleteTarget(null);
+      fetchPeople();
+    }
   };
 
   const toggleSpeaker = async (p: Person) => {
     const res = await fetch(`/api/admin/attendees/${p.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isSpeaker: !p.isSpeaker }),
+      body: JSON.stringify({ isSpeaker: !p.isSpeaker, eventId: managedEventId }),
     });
     if (res.ok) fetchPeople();
   };
@@ -184,9 +211,16 @@ export function UsersTab() {
     }
   };
 
+  if (!managedEventId) {
+    return <p className="text-sm text-muted-foreground">Please select an event to manage attendees.</p>;
+  }
+
   return (
     <div>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex justify-end gap-2">
+        <Button onClick={() => setImportOpen(true)} size="sm" variant="outline">
+          <Upload className="mr-1 h-4 w-4" /> Import
+        </Button>
         <Button onClick={openCreate} size="sm">
           <Plus className="mr-1 h-4 w-4" /> Add Attendee
         </Button>
@@ -247,94 +281,75 @@ export function UsersTab() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <HoverCardClickable
-                    triggerJSX={
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-muted">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <div className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-muted">
                         <MoreVertical className="h-4 w-4 text-muted-foreground" />
                       </div>
-                    }
-                    side="bottom"
-                    sideOffset={4}
-                    hoverDelay={300}
-                    hoverExitDelay={600}
-                    className="w-48 rounded-lg border border-border bg-white p-1 shadow-lg"
-                  >
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                      onMouseDown={() => openEdit(p)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      Edit
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                      onMouseDown={() => toggleSpeaker(p)}
-                    >
-                      {p.isSpeaker ? (
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="bottom" align="end" className="w-48">
+                      <DropdownMenuItem onSelect={() => openEdit(p)}>
+                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => toggleSpeaker(p)}>
+                        {p.isSpeaker ? (
+                          <>
+                            <MicOff className="mr-2 h-3.5 w-3.5" />
+                            Remove Speaker
+                          </>
+                        ) : (
+                          <>
+                            <Mic2 className="mr-2 h-3.5 w-3.5" />
+                            Set as Speaker
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      {p.userEmail && (
                         <>
-                          <MicOff className="h-3.5 w-3.5" />
-                          Remove Speaker
-                        </>
-                      ) : (
-                        <>
-                          <Mic2 className="h-3.5 w-3.5" />
-                          Set as Speaker
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => toggleRole(p)}>
+                            {p.userRole === "admin" ? (
+                              <>
+                                <ShieldOff className="mr-2 h-3.5 w-3.5" />
+                                Remove Admin
+                              </>
+                            ) : (
+                              <>
+                                <Shield className="mr-2 h-3.5 w-3.5" />
+                                Make Admin
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => toggleBlocked(p)}>
+                            {p.userBlocked ? (
+                              <>
+                                <Check className="mr-2 h-3.5 w-3.5 text-green-600" />
+                                Unblock
+                              </>
+                            ) : (
+                              <>
+                                <Ban className="mr-2 h-3.5 w-3.5 text-destructive" />
+                                Block
+                              </>
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => openPasswordDialog(p)}>
+                            <KeyRound className="mr-2 h-3.5 w-3.5" />
+                            Reset Password
+                          </DropdownMenuItem>
                         </>
                       )}
-                    </button>
-                    {p.userEmail && (
-                      <>
-                        <div className="mx-2 my-1 border-t border-border" />
-                        <button
-                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                          onMouseDown={() => toggleRole(p)}
-                        >
-                          {p.userRole === "admin" ? (
-                            <>
-                              <ShieldOff className="h-3.5 w-3.5" />
-                              Remove Admin
-                            </>
-                          ) : (
-                            <>
-                              <Shield className="h-3.5 w-3.5" />
-                              Make Admin
-                            </>
-                          )}
-                        </button>
-                        <button
-                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                          onMouseDown={() => toggleBlocked(p)}
-                        >
-                          {p.userBlocked ? (
-                            <>
-                              <Check className="h-3.5 w-3.5 text-green-600" />
-                              Unblock
-                            </>
-                          ) : (
-                            <>
-                              <Ban className="h-3.5 w-3.5 text-destructive" />
-                              Block
-                            </>
-                          )}
-                        </button>
-                        <button
-                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                          onMouseDown={() => openPasswordDialog(p)}
-                        >
-                          <KeyRound className="h-3.5 w-3.5" />
-                          Reset Password
-                        </button>
-                      </>
-                    )}
-                    <div className="mx-2 my-1 border-t border-border" />
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
-                      onMouseDown={() => handleDelete(p.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </HoverCardClickable>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                        onClick={() => setDeleteTarget(p)}
+                      >
+                        <Trash2 className="mr-2 h-3.5 w-3.5" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}
@@ -390,18 +405,6 @@ export function UsersTab() {
                 />
               )}
             </div>
-            {!editing && form.email && (
-              <div className="grid gap-2">
-                <Label htmlFor="u-password">Password</Label>
-                <Input
-                  id="u-password"
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder="Min 8 characters"
-                />
-              </div>
-            )}
             <div className="flex items-center gap-2">
               <input
                 id="u-speaker"
@@ -428,6 +431,33 @@ export function UsersTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSubmit}>{editing ? "Save" : "Create"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import dialog */}
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        type="attendees"
+        eventId={managedEventId}
+        onSuccess={fetchPeople}
+      />
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-sm rounded-lg space-y-4">
+          <DialogHeader>
+            <DialogTitle>Remove Attendee</DialogTitle>
+            <DialogDescription>
+              Remove <span className="font-medium text-foreground">{deleteTarget?.name}</span> from this event? 
+              <br />
+              This only removes them from the current event, their account will not be deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Remove</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
