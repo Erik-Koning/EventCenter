@@ -4,9 +4,6 @@ import { handleApiError, commonErrors } from "@/lib/api-error";
 import { getAzureOpenAIClient, getDeploymentNameMini } from "@/lib/azure-openai";
 import { getEventContext } from "@/lib/chat/event-context-cache";
 import { searchDiscussions } from "@/lib/chat/search-discussions";
-import { db } from "@/lib/db";
-import { eq } from "drizzle-orm";
-import { eventAttendees } from "@/db/schema";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 
 const SEARCH_DISCUSSIONS_TOOL: ChatCompletionTool = {
@@ -84,12 +81,8 @@ export async function POST(request: Request) {
       return commonErrors.badRequest("Message is required");
     }
 
-    // Resolve event from enrollment
-    const enrollment = await db.query.eventAttendees.findFirst({
-      where: eq(eventAttendees.userId, user.id),
-    });
-
-    const eventId = enrollment?.eventId;
+    // Use the user's currently selected event
+    const eventId = user.currentEventId;
     if (!eventId) {
       return commonErrors.notFound("Event enrollment");
     }
