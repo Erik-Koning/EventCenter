@@ -17,6 +17,15 @@ import { getRequiredEnv } from "@/lib/environment";
 
 let _containerClient: ContainerClient | null = null;
 
+function sanitizeBlobFileName(fileName: string): string {
+  return fileName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/\s+/g, "-") // spaces → hyphens
+    .replace(/[^a-zA-Z0-9._-]/g, "") // remove other special chars
+    .replace(/-+/g, "-"); // collapse multiple hyphens
+}
+
 function getContainerClient(): ContainerClient {
   if (_containerClient) return _containerClient;
 
@@ -41,7 +50,7 @@ export async function uploadBlob(
   const container = getContainerClient();
 
   // Prefix with timestamp to avoid collisions
-  const blobName = `session-documents/${Date.now()}-${fileName}`;
+  const blobName = `session-documents/${Date.now()}-${sanitizeBlobFileName(fileName)}`;
   const blockBlobClient = container.getBlockBlobClient(blobName);
 
   await blockBlobClient.uploadData(buffer, {
@@ -52,14 +61,25 @@ export async function uploadBlob(
 }
 
 /**
+ * Extract the blob name from a full Azure Blob Storage URL.
+ * Handles both encoded and unencoded pathnames.
+ */
+function extractBlobName(blobUrl: string): string | undefined {
+  const containerName = getRequiredEnv("AZURE_STORAGE_CONTAINER_NAME");
+  const url = new URL(blobUrl);
+  const pathname = decodeURIComponent(url.pathname);
+  const prefix = `/${containerName}/`;
+  const idx = pathname.indexOf(prefix);
+  if (idx === -1) return undefined;
+  return pathname.slice(idx + prefix.length);
+}
+
+/**
  * Delete a blob by its full URL.
  */
 export async function deleteBlob(blobUrl: string): Promise<void> {
   const container = getContainerClient();
-  const url = new URL(blobUrl);
-  // The blob name is everything after the container name in the path
-  const containerName = getRequiredEnv("AZURE_STORAGE_CONTAINER_NAME");
-  const blobName = url.pathname.split(`/${containerName}/`)[1];
+  const blobName = extractBlobName(blobUrl);
 
   if (!blobName) return;
 
@@ -86,11 +106,12 @@ export async function generateSasUrl(blobUrl: string): Promise<string> {
   const accountName = accountNameMatch[1];
   const accountKey = accountKeyMatch[1];
 
-  const url = new URL(blobUrl);
-  const blobName = url.pathname.split(`/${containerName}/`)[1];
+  const blobName = extractBlobName(blobUrl);
 
   if (!blobName) {
-    throw new Error("Could not extract blob name from URL");
+    throw new Error(
+      `Could not extract blob name from URL: ${blobUrl} (container: ${containerName})`
+    );
   }
 
   const sharedKeyCredential = new StorageSharedKeyCredential(
